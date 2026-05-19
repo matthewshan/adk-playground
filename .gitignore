@@ -1,0 +1,7 @@
+.env
+.venv/
+.tools/
+.ollama/
+.adk/
+__pycache__/
+*.pyc
