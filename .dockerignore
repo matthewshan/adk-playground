@@ -1,0 +1,14 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.github/
+.vscode/
+docs/
+terraform/
+minimal_ollama_adk/
+*.md
+.tools/
+.ollama/
