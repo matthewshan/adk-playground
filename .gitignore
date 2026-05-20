@@ -5,3 +5,9 @@
 .adk/
 __pycache__/
 *.pyc
+
+# Terraform — state files can contain service account private keys in plaintext
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl

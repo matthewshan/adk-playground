@@ -110,6 +110,47 @@ export OLLAMA_MODEL=qwen2.5:0.5b
 adk run minimal_ollama_adk "Say hello in one short sentence."
 ```
 
+---
+
+## Daily Briefing — Google Calendar service account (Terraform)
+
+The Calendar integration requires a GCP service account provisioned by Terraform.
+The configuration lives in `terraform/modules/google-calendar-sa/`.
+
+### Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| Terraform ≥ 1.6 | [Install](https://developer.hashicorp.com/terraform/install) |
+| `gcloud` CLI | [Install](https://cloud.google.com/sdk/docs/install) |
+| Existing GCP project | Create one at [console.cloud.google.com](https://console.cloud.google.com) — billing account must be linked to enable APIs |
+
+### Commands
+
+```bash
+cd terraform/modules/google-calendar-sa
+
+# Authenticate Terraform with Google
+gcloud auth application-default login
+
+# Initialise providers
+terraform init
+
+# Preview (replace with your existing GCP project ID)
+terraform plan -var="project_id=<your-project-id>"
+
+# Apply
+terraform apply -var="project_id=<your-project-id>"
+
+# Retrieve the service account key and save to .env
+terraform output -raw service_account_key_base64
+```
+
+After `apply`, share your Google Calendar with the `service_account_email` output (Viewer permission).
+Full details: [`docs/analysis/google-calendar-private-setup.md`](docs/analysis/google-calendar-private-setup.md)
+
+---
+
 ## Notes
 
 - `smollm2:135m` is tiny and useful mainly for proving the plumbing works.
