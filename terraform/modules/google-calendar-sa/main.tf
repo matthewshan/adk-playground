@@ -16,7 +16,6 @@ terraform {
 variable "project_id" {
   description = "ID of the existing GCP project to deploy into."
   type        = string
-  default     = "adk-agents-496905"
 }
 
 variable "region" {
