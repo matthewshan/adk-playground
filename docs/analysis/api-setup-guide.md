@@ -26,30 +26,30 @@ GEMINI_API_KEY=<your key>
 
 ---
 
-## 2. NewsAPI.org — News API Key
+## 2. GNews — General Top Headlines
 
-**Used for:** `get_news()` — general top headlines + cloud/AI topic filtering.
+**Used for:** `get_news()` — the 5 general headlines block.
 
 ### Steps
-1. Go to [https://newsapi.org/register](https://newsapi.org/register) and create a free developer account.
-2. After email verification, your API key is shown on the dashboard under **API Key**.
-3. Copy it.
+1. Go to [https://gnews.io](https://gnews.io) and click **Get API Key**.
+2. Create a free account (email + password, no credit card).
+3. Copy the API key from your dashboard.
 
-### Limits (free / developer tier)
+### Limits (free tier)
 | Limit | Value |
 |---|---|
 | Requests per day | 100 |
-| Results per request | Up to 100 |
-| Delay on free tier | Headlines are ~15 minutes behind live |
-| Domains allowed | `localhost` and `127.0.0.1` only on free tier |
+| Articles per request | Up to 10 |
+| Historical data | 1 month |
+| Server-side requests | Localhost only on free tier |
 
-The agent makes 3 requests per run (general, cloud, AI), so 100 req/day gives ~33 runs/day — well within budget.
+The agent makes 1 GNews request per run, so 100 req/day = 100 runs before hitting the limit.
 
-> **Important:** The free developer plan restricts requests to localhost. This is fine for local testing and for a k8s CronJob (which makes server-side requests, not browser requests). If NewsAPI rejects requests with a `426 Upgrade Required`, you may need to pass `X-Api-Key` header instead of a query parameter — `tools.py` already does this correctly.
+> **Note:** The GNews free tier restricts server-side requests to localhost. This is fine for local development; a paid plan is required for cloud/production deployments.
 
 ### Environment variable
 ```
-NEWS_API_KEY=<your key>
+GNEWS_API_KEY=<your key>
 ```
 
 ---
@@ -100,8 +100,8 @@ cp .env.example .env
 # Google AI (Gemini)
 GEMINI_API_KEY=
 
-# NewsAPI
-NEWS_API_KEY=
+# GNews
+GNEWS_API_KEY=
 
 # Discord
 DISCORD_WEBHOOK_URL=

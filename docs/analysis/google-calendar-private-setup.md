@@ -1,6 +1,6 @@
 # Google Calendar — Private Calendar Setup Guide
 
-This guide walks through granting the daily briefing agent read-only access to a private Google Calendar using a GCP service account. Terraform provisions the service account and key; one manual step shares the calendar with the service account email.
+This guide walks through creating a GCP project and granting the daily briefing agent read-only access to a private Google Calendar using a service account. Terraform provisions everything; one manual step shares the calendar with the service account email.
 
 ---
 
@@ -8,8 +8,9 @@ This guide walks through granting the daily briefing agent read-only access to a
 
 ```
 Terraform                         Google Cloud
+  └─ google_project           →    New GCP project
   └─ google_service_account  →    daily-briefing-agent@<project>.iam.gserviceaccount.com
-  └─ google_service_account_key → JSON key (base64) → stored in Infisical
+  └─ google_service_account_key → JSON key (base64) → stored in .env locally
 
 Google Calendar (manual step)
   └─ Share calendar with service account email (Viewer)
@@ -28,42 +29,59 @@ The agent never asks for user consent at runtime — the service account is trus
 
 | Requirement | Notes |
 |---|---|
-| GCP project | Any project works; free tier is fine |
+| Google account | Any personal Google account works |
+| GCP billing account | Required to enable APIs. Go to [https://console.cloud.google.com/billing](https://console.cloud.google.com/billing), create one if needed. Free tier / $0 credit card on file is sufficient. |
 | Terraform ≥ 1.6 | [Install guide](https://developer.hashicorp.com/terraform/install) |
-| `gcloud` CLI authenticated | `gcloud auth application-default login` |
-| Google Calendar API enabled | Terraform enables it automatically |
+| `gcloud` CLI | Run `gcloud auth application-default login` to authenticate Terraform |
 
 ---
 
-## Step 1 — Run Terraform
+## Step 1 — Find your billing account ID
 
-The Terraform configuration lives in `terraform/google-calendar-sa/`.
+1. Go to [https://console.cloud.google.com/billing](https://console.cloud.google.com/billing).
+2. Click your billing account.
+3. The **Billing account ID** is shown in the format `XXXXXX-XXXXXX-XXXXXX`. Copy it.
+
+---
+
+## Step 2 — Run Terraform
+
+The Terraform configuration lives in `terraform/google-calendar-sa/`. State is stored locally in `terraform.tfstate` — keep that file out of source control (it's already in `.gitignore`).
 
 ```bash
 cd terraform/google-calendar-sa
 
+# Authenticate with Google
+gcloud auth application-default login
+
 # Initialise providers
 terraform init
 
-# Preview what will be created
-terraform plan -var="project_id=<your-gcp-project-id>"
+# Preview what will be created (a new project, Calendar API enablement, service account + key)
+terraform plan \
+  -var="project_id=daily-briefing-<your-handle>" \
+  -var="billing_account=XXXXXX-XXXXXX-XXXXXX"
 
 # Apply
-terraform apply -var="project_id=<your-gcp-project-id>"
+terraform apply \
+  -var="project_id=daily-briefing-<your-handle>" \
+  -var="billing_account=XXXXXX-XXXXXX-XXXXXX"
 ```
+
+> `project_id` must be globally unique across all of Google Cloud, lowercase letters/numbers/hyphens, max 30 characters. Example: `daily-briefing-matthewshan`.
 
 After `apply` completes, note the two outputs:
 
 | Output | What to do with it |
 |---|---|
 | `service_account_email` | Copy this — you will paste it into Google Calendar |
-| `service_account_key_base64` | Run `terraform output -raw service_account_key_base64` and store in Infisical |
+| `service_account_key_base64` | Run `terraform output -raw service_account_key_base64` and save to `.env` |
 
 > The key is marked `sensitive` in Terraform state. Run the command above to retrieve it — it will not appear in plan/apply output.
 
 ---
 
-## Step 2 — Share the calendar with the service account
+## Step 3 — Share the calendar with the service account
 
 The Calendar API does not use IAM for per-calendar access. You share the calendar exactly as you would share it with another person.
 
@@ -81,7 +99,7 @@ The Calendar API does not use IAM for per-calendar access. You share the calenda
 
 ---
 
-## Step 3 — Get your Calendar ID
+## Step 4 — Get your Calendar ID
 
 1. In Google Calendar, go to **Settings** for the shared calendar.
 2. Scroll to **Integrate calendar**.
@@ -91,20 +109,7 @@ The Calendar API does not use IAM for per-calendar access. You share the calenda
 
 ---
 
-## Step 4 — Store secrets in Infisical
-
-Store the following two secrets in your Infisical project (same project used by the k8s ExternalSecret):
-
-| Infisical key | Value |
-|---|---|
-| `google-calendar-service-account-json` | Output of `terraform output -raw service_account_key_base64` |
-| `google-calendar-id` | Calendar ID from Step 3 |
-
-These map to the environment variables `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` and `GOOGLE_CALENDAR_ID` via the `external-secret.yaml` in the k8s deployment.
-
----
-
-## Step 5 — Test locally
+## Step 5 — Add secrets to `.env` and test locally
 
 Add the values to your local `.env`:
 
@@ -142,21 +147,11 @@ Service account keys should be rotated periodically. To rotate:
 ```bash
 cd terraform/google-calendar-sa
 
-# Terraform will destroy the old key resource and create a new one
-terraform apply -var="project_id=<your-gcp-project-id>"
+# Terraform destroys the old key resource and creates a new one
+terraform apply \
+  -var="project_id=<your-project-id>" \
+  -var="billing_account=XXXXXX-XXXXXX-XXXXXX"
 
-# Retrieve new key and update Infisical
+# Retrieve the new key and update .env (and k8s Secret when deploying)
 terraform output -raw service_account_key_base64
 ```
-
-After updating Infisical, the next ExternalSecret sync (or a manual `kubectl annotate externalsecret ...`) will push the new value to the k8s Secret.
-
----
-
-## Terraform resource summary
-
-| Resource | Purpose |
-|---|---|
-| `google_project_service.calendar_api` | Enables the Google Calendar API on your project |
-| `google_service_account.daily_briefing` | Creates the `daily-briefing-agent` service account |
-| `google_service_account_key.daily_briefing` | Generates and exports the JSON key |
