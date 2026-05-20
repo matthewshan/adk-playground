@@ -265,3 +265,13 @@ kubectl logs -f job/manual-test -n daily-briefing
 | Route through n8n | Replace `send_discord()` with a POST to an n8n webhook; n8n handles multi-channel fan-out |
 | Try a local LLM | Change `GEMINI_MODEL` env var to an Ollama model string; use `LiteLlm` wrapper as in `minimal_ollama_adk` |
 | Weekly digest variant | Duplicate the agent with a different schedule and a `instruction_weekly.md` that asks for a 7-day summary |
+
+---
+
+## Later: memory and two-way Discord
+
+Two natural next steps once the one-way digest is solid:
+
+**Memory** — right now every run is stateless. Adding ADK persistent memory (e.g. `VertexAiMemoryBankService` or a simple file/database store) would let the agent remember things across days: which news stories it has already mentioned, personal preferences ("I don't care about baseball in February"), or a running log of what the weather has been like. This is a pure `agent.py` + runner change; the tools and k8s manifests stay the same.
+
+**Reading and responding to Discord** — today the agent only posts. A future version could poll a Discord channel (or receive events via a Discord bot + webhook listener) so you can reply to the morning digest and have the agent respond. This would change the deployment from a one-shot CronJob to a long-running bot process, and would require a Discord bot token instead of (or alongside) the webhook URL. The ADK agent and tools layer would stay largely the same — only the delivery and runner model changes.
