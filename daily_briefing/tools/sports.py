@@ -286,6 +286,8 @@ def get_sports_scores(teams: list[TrackedTeam]) -> str:
     sections: list[str] = []
 
     for team_entry in teams:
+        if isinstance(team_entry, dict):
+            team_entry = TrackedTeam(**team_entry)
         league_label = team_entry.league_label
         sport = team_entry.sport
         league = team_entry.league
