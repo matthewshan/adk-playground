@@ -1,5 +1,3 @@
-# TODO: This is a WIP - I have yet to set up google service accounts at this time. I may want to also consider setting up the gemini API key with terraform if it is possible.
-
 terraform {
   required_version = ">= 1.6"
 
@@ -16,19 +14,9 @@ terraform {
 # ── Variables ──────────────────────────────────────────────────────────────────
 
 variable "project_id" {
-  description = "Desired GCP project ID (globally unique, lowercase letters/numbers/hyphens, max 30 chars)."
+  description = "ID of the existing GCP project to deploy into."
   type        = string
-}
-
-variable "project_name" {
-  description = "Human-readable display name for the GCP project."
-  type        = string
-  default     = "Daily Briefing"
-}
-
-variable "billing_account" {
-  description = "GCP billing account ID to link to the new project (format: XXXXXX-XXXXXX-XXXXXX). Find yours at https://console.cloud.google.com/billing."
-  type        = string
+  default     = "adk-agents-496905"
 }
 
 variable "region" {
@@ -38,36 +26,26 @@ variable "region" {
 }
 
 # ── Provider ───────────────────────────────────────────────────────────────────
-# No project set here — resources reference the created project directly.
 
 provider "google" {
-  region = var.region
-}
-
-# ── GCP project ────────────────────────────────────────────────────────────────
-
-resource "google_project" "daily_briefing" {
-  project_id      = var.project_id
-  name            = var.project_name
-  billing_account = var.billing_account
+  project = var.project_id
+  region  = var.region
 }
 
 # ── Enable Calendar API ────────────────────────────────────────────────────────
 
 resource "google_project_service" "calendar_api" {
-  project = google_project.daily_briefing.project_id
+  project = var.project_id
   service = "calendar-json.googleapis.com"
 
   # Keep the API enabled even if this Terraform module is destroyed.
   disable_on_destroy = false
-
-  depends_on = [google_project.daily_briefing]
 }
 
 # ── Service account ────────────────────────────────────────────────────────────
 
 resource "google_service_account" "daily_briefing" {
-  project      = google_project.daily_briefing.project_id
+  project      = var.project_id
   account_id   = "daily-briefing-agent"
   display_name = "Daily Briefing Agent"
   description  = "Read-only Google Calendar access for the daily briefing ADK agent."

@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from daily_briefing.tools import TrackedTeam, get_news, get_sports_scores, get_weather
+from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.discord_webhook import send_discord
 
 _DEFAULT_TEAMS = [
@@ -96,6 +97,24 @@ def test_news() -> bool | None:
         return False
 
 
+def test_calendar() -> bool | None:
+    _header("CALENDAR — Google Calendar events")
+    sa_b64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64")
+    if not sa_b64:
+        print(f"{SKIP}  GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 not set — add it to .env to run this test")
+        return None
+    try:
+        result = get_calendar_events()
+        print(result)
+        assert result, "Result was empty"
+        print(PASS)
+        return True
+    except Exception:
+        print(FAIL)
+        traceback.print_exc()
+        return False
+
+
 def test_discord() -> bool | None:
     _header("DISCORD — webhook delivery")
     url = os.getenv("DISCORD_WEBHOOK_URL")
@@ -114,7 +133,7 @@ def test_discord() -> bool | None:
 
 
 def main() -> int:
-    tests = [test_weather_grand_rapids, test_sports_scores, test_news, test_discord]
+    tests = [test_weather_grand_rapids, test_sports_scores, test_news, test_calendar, test_discord]
     results = [t() for t in tests]
     passed = results.count(True)
     failed = results.count(False)

@@ -80,6 +80,24 @@ Setting up a private Google Calendar requires a GCP service account. See the ded
 
 [google-calendar-private-setup.md](./google-calendar-private-setup.md)
 
+### How access works
+
+Terraform handles the GCP side; calendar sharing is a one-time manual step:
+
+1. **Terraform provisions** (automated):
+   - Enables the Calendar API in your GCP project
+   - Creates a service account: `daily-briefing-agent@<project-id>.iam.gserviceaccount.com`
+   - Generates a JSON key for that account
+
+2. **You share the calendar** (manual, one-time):
+   - Open [calendar.google.com](https://calendar.google.com)
+   - Hover your calendar → three-dot menu → **Settings and sharing**
+   - **Share with specific people** → add the service account email from the Terraform output
+   - Set permission to **See all event details** (read-only) → Send
+   - The share takes effect immediately — no acceptance needed
+
+3. **The agent authenticates** at runtime using `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` from `.env`, and because your calendar is shared with that service account, the Calendar API returns your events.
+
 ### Environment variables (summary)
 ```
 GOOGLE_CALENDAR_ID=<your-calendar-id>@group.calendar.google.com
