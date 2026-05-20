@@ -1,6 +1,6 @@
 # Plan: Daily Briefing ADK Agent
 
-A morning digest agent that fetches weather, breaking news, sports scores (NFL, MLB, CFL), and Google Calendar events, uses Gemini Flash to write a friendly summary, and delivers it to Discord — triggered every morning by a k8s CronJob.
+A morning digest agent that fetches weather for Grand Rapids MI, breaking news (including cloud tech and AI), sports scores for favourite teams (Detroit Lions, Toronto Blue Jays, Hamilton TiCats), and Google Calendar events, uses Gemini Flash to write a friendly summary, and delivers it to Discord — triggered every morning by a k8s CronJob.
 
 ---
 
@@ -55,12 +55,13 @@ Build and test each tool function in isolation before wiring up the agent. Each 
 **`tools.py` functions:**
 
 `get_weather(latitude: float, longitude: float) -> str`
-- Open-Meteo endpoint; default coords Wyoming, MI (42.70, -85.76)
+- Open-Meteo endpoint; default coords Grand Rapids, MI (42.96, -85.67)
 - Returns a one-line string: `"72°F, clear sky, wind 8 mph"`
 - No API key
 
 `get_news() -> str`
 - NewsAPI top headlines, English, top 5
+- Additionally fetches headlines filtered by topics `"cloud computing"` and `"artificial intelligence"` to surface the latest cloud and AI advancements
 - Returns a bulleted list of headline + source
 - Requires `NEWS_API_KEY` from env
 
@@ -69,6 +70,7 @@ Build and test each tool function in isolation before wiring up the agent. Each 
   - `site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`
   - `site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard`
   - `site.api.espn.com/apis/site/v2/sports/football/cfl/scoreboard`
+- Favourite teams to highlight: **Detroit Lions** (NFL), **Toronto Blue Jays** (MLB), **Hamilton TiCats** (CFL)
 - Returns final scores per league, or `"No games (off-season)"` if scoreboard is empty
 - No API key
 
@@ -88,7 +90,7 @@ Build and test each tool function in isolation before wiring up the agent. Each 
 ```python
 # run standalone before wiring to ADK
 from daily_briefing.tools import get_weather, get_news, get_sports_scores, get_calendar_events
-print(get_weather(42.70, -85.76))
+print(get_weather(42.96, -85.67))
 print(get_news())
 print(get_sports_scores())
 print(get_calendar_events())
@@ -101,16 +103,16 @@ print(get_calendar_events())
 **`instruction.md`** — the agent's personality and output contract. Lives in a separate file so it can be tuned without rebuilding the image.
 
 ```markdown
-You are a friendly personal assistant delivering a daily morning briefing.
+You are a friendly personal assistant delivering a daily morning briefing for someone in Grand Rapids, MI.
 
 Call each tool to collect the data, then compose a single Discord message.
 
 Rules:
-1. Stay under 1500 characters total.
+1. Stay under 1800 characters total.
 2. Use this section order with emoji headers:
-   ☀️ **Weather** — one sentence
-   📰 **News** — up to 3 bullet points
-   🏈⚾🏈 **Sports** — one line per league; omit leagues with no active games
+   ☀️ **Weather** — one sentence (Grand Rapids, MI)
+   📰 **News** — up to 3 general headlines + up to 2 cloud/AI highlights
+   🏈⚾🏈 **Sports** — always show Detroit Lions, Toronto Blue Jays, and Hamilton TiCats results first; omit leagues with no active games
    📅 **Calendar** — bullet list; say "Nothing scheduled" if empty
 3. End with one short motivational sentence.
 4. Never invent data. If a tool failed, say so briefly in that section.
@@ -157,7 +159,8 @@ async def run():
         new_message=types.Content(
             role="user",
             parts=[types.Part.from_text(
-                "Fetch weather for Wyoming MI, top news, NFL/MLB/CFL scores, "
+                "Fetch weather for Grand Rapids MI, top news plus the latest cloud and AI news, "
+                "NFL/MLB/CFL scores (highlight Detroit Lions, Toronto Blue Jays, Hamilton TiCats), "
                 "and today's calendar events. Write and send the morning digest."
             )],
         ),
