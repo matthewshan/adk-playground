@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from google.adk.runners import InMemoryRunner
@@ -67,7 +68,7 @@ async def interactive_loop() -> int:
 
 
 def main() -> int:
-    load_dotenv()
+    load_dotenv(Path(__file__).parent / ".env")
 
     prompt = " ".join(sys.argv[1:]).strip()
     if not prompt:
