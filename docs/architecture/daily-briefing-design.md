@@ -2,11 +2,15 @@
 
 ## Overview
 
-A single-shot morning digest agent built on **Google ADK** and **Gemini 2.0 Flash**.
-On each run it gathers weather, news, sports, and calendar data; asks Gemini to write
-a friendly summary; and posts the result to Discord via webhook.
+A single-shot morning digest agent built on **Google ADK**.
+On each run it gathers weather, news, sports, and calendar data; asks the configured
+model backend to write a summary; and posts the result to Discord via webhook.
 
 Intended deployment: a **Kubernetes CronJob** running daily at 7 AM.
+
+Model backend is selected by `BACKEND`:
+- `gemini` (default): uses `GEMINI_MODEL` (default `gemini-3.5-flash`)
+- `ollama`: uses `OLLAMA_MODEL` via ADK LiteLlm
 
 ---
 
@@ -15,9 +19,10 @@ Intended deployment: a **Kubernetes CronJob** running daily at 7 AM.
 ```
 daily_briefing/
   __init__.py           # package marker
-  agent.py              # ADK Agent — wires model + tools
+  agent.py              # ADK Agent — wires backend + tools
   instruction.md        # system prompt (edit without touching code)
   main.py               # InMemoryRunner entry point
+  test_apis.py          # smoke tests for tools
   tools/
     __init__.py         # re-exports all five tool functions
     calendar_events.py  # Google Calendar v3 (service account)
@@ -33,7 +38,7 @@ daily_briefing/
 
 ```
 main.py (InMemoryRunner)
-  └─ agent.py (ADK Agent — gemini-2.0-flash)
+  └─ agent.py (ADK Agent)
        ├─ tools/weather.py          → Open-Meteo API
        ├─ tools/news.py             → GNews API
        ├─ tools/sports.py           → ESPN public API
@@ -47,8 +52,8 @@ main.py (InMemoryRunner)
 
 | Tool module        | API                    | Auth                              | Notes                          |
 |--------------------|------------------------|-----------------------------------|--------------------------------|
-| `weather.py`       | Open-Meteo             | None                              | `current` + `hourly` params; `timezone=America/Detroit` |
-| `news.py`          | GNews                  | `GNEWS_API_KEY`                   | 10 general headlines; 100 req/day free tier (localhost only) |
+| `weather.py`       | Open-Meteo             | None                              | current + hourly forecast |
+| `news.py`          | GNews                  | `GNEWS_API_KEY`                   | top headlines |
 | `sports.py`        | ESPN public API        | None                              | `/teams`, `/teams/{id}`, `/teams/{id}/schedule`, `/scoreboard?dates=` |
 | `calendar_events.py` | Google Calendar v3   | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Service account; share calendar with SA email |
 | `discord_webhook.py` | Discord webhook      | `DISCORD_WEBHOOK_URL`             | POST; truncates to 2000-char limit |
@@ -57,24 +62,20 @@ main.py (InMemoryRunner)
 
 ## Sports — tracked teams
 
-Defined in `tools/sports.py` as `_TRACKED_TEAMS` (edit to add/remove teams):
+`get_sports_scores()` accepts a list of `TrackedTeam` entries.
+The briefing prompt currently focuses on:
+- Toronto Blue Jays (MLB)
+- Detroit Lions (NFL)
+- Hamilton Tiger-Cats (CFL)
 
-```python
-_TRACKED_TEAMS: list[tuple[str, str, str, str]] = [
-    ("MLB", "baseball", "mlb",      "Toronto Blue Jays"),
-    ("NFL", "football", "nfl",      "Detroit Lions"),
-    ("CFL", "football", "cfl",      "Hamilton Tiger-Cats"),
-]
-```
-
-Per team the tool returns: **record**, **recent completed games** (yesterday + today via scoreboard), and **upcoming games** (next 3 from team schedule). Off-season is detected when no recent games exist and the next game is >30 days away.
+Per team the tool returns: **record**, **recent completed games**, **upcoming games**, and (when available) **division standings**.
 
 ---
 
 ## Environment variables
 
 See `daily_briefing/.env.example` for the full list. At runtime, `main.py` calls
-`load_dotenv()` to load values from a `.env` file in the repo root.
+`load_dotenv()` to load values from `daily_briefing/.env` before importing the agent.
 
 ---
 
@@ -84,7 +85,7 @@ See `daily_briefing/.env.example` for the full list. At runtime, `main.py` calls
 - **Plain Python callables**: ADK picks up tools automatically — no decorators or schemas needed.
 - **Single-shot execution**: `InMemoryRunner` runs the agent once and exits; no persistent session state.
 - **System prompt in `instruction.md`**: editable without changing Python code.
-- **Off-season detection**: sports tool suppresses score sections when a team is out of season and shows the next scheduled game date.
+- **Backend switch via env**: one agent supports either Gemini or local Ollama.
 
 ---
 

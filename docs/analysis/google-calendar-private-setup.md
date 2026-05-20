@@ -7,18 +7,16 @@ This guide walks through creating a GCP project and granting the daily briefing 
 ## Architecture overview
 
 ```
-Terraform                         Google Cloud
-  └─ google_project           →    New GCP project
-  └─ google_service_account  →    daily-briefing-agent@<project>.iam.gserviceaccount.com
-  └─ google_service_account_key → JSON key (base64) → stored in .env locally
+Terraform (terraform/modules/google-calendar-sa)
+  └─ creates service account + key
 
-Google Calendar (manual step)
-  └─ Share calendar with service account email (Viewer)
+Google Calendar (manual)
+  └─ share calendar with service account email (Viewer)
 
-daily_briefing/tools.py
+daily_briefing/tools/calendar_events.py
   └─ Loads key from GOOGLE_SERVICE_ACCOUNT_JSON_BASE64
-  └─ Authenticates via google-auth library
-  └─ Calls Calendar API v3 → list today's events
+  └─ Authenticates via service account credentials
+  └─ Calls Calendar API v3 → list upcoming events
 ```
 
 The agent never asks for user consent at runtime — the service account is trusted directly by the calendar.
@@ -36,20 +34,12 @@ The agent never asks for user consent at runtime — the service account is trus
 
 ---
 
-## Step 1 — Find your billing account ID
+## Step 1 — Run Terraform
 
-1. Go to [https://console.cloud.google.com/billing](https://console.cloud.google.com/billing).
-2. Click your billing account.
-3. The **Billing account ID** is shown in the format `XXXXXX-XXXXXX-XXXXXX`. Copy it.
-
----
-
-## Step 2 — Run Terraform
-
-The Terraform configuration lives in `terraform/google-calendar-sa/`. State is stored locally in `terraform.tfstate` — keep that file out of source control (it's already in `.gitignore`).
+The Terraform configuration lives in `terraform/modules/google-calendar-sa/`.
 
 ```bash
-cd terraform/google-calendar-sa
+cd terraform/modules/google-calendar-sa
 
 # Authenticate with Google
 gcloud auth application-default login
@@ -57,31 +47,25 @@ gcloud auth application-default login
 # Initialise providers
 terraform init
 
-# Preview what will be created (a new project, Calendar API enablement, service account + key)
-terraform plan \
-  -var="project_id=daily-briefing-<your-handle>" \
-  -var="billing_account=XXXXXX-XXXXXX-XXXXXX"
+# Preview what will be created
+terraform plan -var="project_id=<your-project-id>"
 
 # Apply
-terraform apply \
-  -var="project_id=daily-briefing-<your-handle>" \
-  -var="billing_account=XXXXXX-XXXXXX-XXXXXX"
+terraform apply -var="project_id=<your-project-id>"
 ```
-
-> `project_id` must be globally unique across all of Google Cloud, lowercase letters/numbers/hyphens, max 30 characters. Example: `daily-briefing-matthewshan`.
 
 After `apply` completes, note the two outputs:
 
 | Output | What to do with it |
 |---|---|
-| `service_account_email` | Copy this — you will paste it into Google Calendar |
+| `service_account_email` | Copy this — you will paste it into Google Calendar sharing |
 | `service_account_key_base64` | Run `terraform output -raw service_account_key_base64` and save to `.env` |
 
 > The key is marked `sensitive` in Terraform state. Run the command above to retrieve it — it will not appear in plan/apply output.
 
 ---
 
-## Step 3 — Share the calendar with the service account
+## Step 2 — Share the calendar with the service account
 
 The Calendar API does not use IAM for per-calendar access. You share the calendar exactly as you would share it with another person.
 
@@ -99,7 +83,7 @@ The Calendar API does not use IAM for per-calendar access. You share the calenda
 
 ---
 
-## Step 4 — Get your Calendar ID
+## Step 3 — Get your Calendar ID
 
 1. In Google Calendar, go to **Settings** for the shared calendar.
 2. Scroll to **Integrate calendar**.
@@ -109,7 +93,7 @@ The Calendar API does not use IAM for per-calendar access. You share the calenda
 
 ---
 
-## Step 5 — Add secrets to `.env` and test locally
+## Step 4 — Add secrets to `.env` and test locally
 
 Add the values to your local `.env`:
 
@@ -122,36 +106,20 @@ Then run the calendar tool in isolation:
 
 ```bash
 python - <<'EOF'
-import os
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
-from daily_briefing.tools import get_calendar_events
+
+load_dotenv(Path("daily_briefing/.env"))
+from daily_briefing.tools.calendar_events import get_calendar_events
+
 print(get_calendar_events())
 EOF
 ```
 
 Expected output examples:
 - `• Team standup @ 9:00 AM` (events found)
-- `Nothing scheduled` (no events today — still means auth worked)
+- `Nothing scheduled` (no upcoming events in range — still means auth worked)
 
 If you see `Calendar unavailable: GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 not set.`, the env var is not loaded.
 
 If you see a `403 Forbidden` from the Google API, the calendar has not been shared with the service account yet (re-check Step 2).
-
----
-
-## Rotating the service account key
-
-Service account keys should be rotated periodically. To rotate:
-
-```bash
-cd terraform/google-calendar-sa
-
-# Terraform destroys the old key resource and creates a new one
-terraform apply \
-  -var="project_id=<your-project-id>" \
-  -var="billing_account=XXXXXX-XXXXXX-XXXXXX"
-
-# Retrieve the new key and update .env (and k8s Secret when deploying)
-terraform output -raw service_account_key_base64
-```

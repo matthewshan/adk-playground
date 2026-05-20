@@ -1,133 +1,83 @@
 # API Account Setup Guide
 
-This document explains how to obtain the API credentials needed by the daily briefing agent. Each section covers what the key is used for, where to create it, any limits to be aware of, and the exact environment variable name to use.
+This guide covers credentials required by `daily_briefing`.
 
 ---
 
-## 1. Google AI Studio — Gemini API Key
+## 1) Google AI Studio — Gemini API Key
 
-**Used for:** The LLM that synthesises the briefing (`gemini-2.0-flash`).
+**Used for:** LLM responses when `BACKEND=gemini`.
 
 ### Steps
-1. Go to [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) and sign in with a Google account.
-2. Click **Create API key** → choose or create a Google Cloud project when prompted.
-3. Copy the generated key.
+1. Go to [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
+2. Create an API key.
+3. Copy the value into `daily_briefing/.env`.
 
-### Limits (free tier)
-- 15 RPM, 1 million tokens/day for Gemini 2.0 Flash.
-- More than sufficient for one daily run.
-
-### Environment variable
-```
+### Environment variables
+```dotenv
+BACKEND=gemini
 GEMINI_API_KEY=<your key>
+# Optional override
+GEMINI_MODEL=gemini-3.5-flash
 ```
-
-> **Note:** `google-adk` reads `GEMINI_API_KEY` automatically. You do **not** need to pass it explicitly to the Agent.
 
 ---
 
-## 2. GNews — General Top Headlines
+## 2) GNews — Top Headlines
 
-**Used for:** `get_news()` — the 5 general headlines block.
+**Used for:** `get_news()` in `daily_briefing/tools/news.py`.
 
 ### Steps
-1. Go to [https://gnews.io](https://gnews.io) and click **Get API Key**.
-2. Create a free account (email + password, no credit card).
-3. Copy the API key from your dashboard.
-
-### Limits (free tier)
-| Limit | Value |
-|---|---|
-| Requests per day | 100 |
-| Articles per request | Up to 10 |
-| Historical data | 1 month |
-| Server-side requests | Localhost only on free tier |
-
-The agent makes 1 GNews request per run, so 100 req/day = 100 runs before hitting the limit.
-
-> **Note:** The GNews free tier restricts server-side requests to localhost. This is fine for local development; a paid plan is required for cloud/production deployments.
+1. Go to [https://gnews.io](https://gnews.io).
+2. Create a free account and generate an API key.
+3. Add it to `daily_briefing/.env`.
 
 ### Environment variable
-```
+```dotenv
 GNEWS_API_KEY=<your key>
 ```
 
 ---
 
-## 3. Discord — Incoming Webhook URL
+## 3) Discord — Incoming Webhook URL
 
-**Used for:** `send_discord()` — posting the finished briefing.
+**Used for:** `send_discord()` in `daily_briefing/tools/discord_webhook.py`.
 
 ### Steps
-1. Open the Discord server where you want the briefing to be posted.
-2. Go to **Server Settings → Integrations → Webhooks**.
-3. Click **New Webhook**, give it a name (e.g. `Daily Briefing`), choose the target channel, and click **Copy Webhook URL**.
-
-### Limits
-- No rate limits for a single daily POST.
-- The webhook URL is a secret — treat it like a password. Anyone with the URL can post to your channel.
+1. In Discord: **Server Settings → Integrations → Webhooks**.
+2. Create a webhook and copy the URL.
+3. Add it to `daily_briefing/.env`.
 
 ### Environment variable
-```
+```dotenv
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/<id>/<token>
 ```
 
 ---
 
-## 4. Google Calendar
+## 4) Google Calendar (private)
 
-Setting up a private Google Calendar requires a GCP service account. See the dedicated guide:
+**Used for:** `get_calendar_events()` in `daily_briefing/tools/calendar_events.py`.
+
+Full setup guide:
 
 [google-calendar-private-setup.md](./google-calendar-private-setup.md)
 
-### How access works
-
-Terraform handles the GCP side; calendar sharing is a one-time manual step:
-
-1. **Terraform provisions** (automated):
-   - Enables the Calendar API in your GCP project
-   - Creates a service account: `daily-briefing-agent@<project-id>.iam.gserviceaccount.com`
-   - Generates a JSON key for that account
-
-2. **You share the calendar** (manual, one-time):
-   - Open [calendar.google.com](https://calendar.google.com)
-   - Hover your calendar → three-dot menu → **Settings and sharing**
-   - **Share with specific people** → add the service account email from the Terraform output
-   - Set permission to **See all event details** (read-only) → Send
-   - The share takes effect immediately — no acceptance needed
-
-3. **The agent authenticates** at runtime using `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` from `.env`, and because your calendar is shared with that service account, the Calendar API returns your events.
-
-### Environment variables (summary)
-```
+### Environment variables
+```dotenv
 GOOGLE_CALENDAR_ID=<your-calendar-id>@group.calendar.google.com
 GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=<base64-encoded service account JSON>
 ```
 
 ---
 
-## 5. `.env.example` reference
+## 5) `.env` file location
 
-A complete `.env.example` is at the repo root. Copy it to `.env` and fill in your values before running locally:
+`daily_briefing/main.py` and `daily_briefing/test_apis.py` load env from:
+- `daily_briefing/.env`
+
+Create it from the example:
 
 ```bash
-cp .env.example .env
-```
-
-```dotenv
-# Google AI (Gemini)
-GEMINI_API_KEY=
-
-# GNews
-GNEWS_API_KEY=
-
-# Discord
-DISCORD_WEBHOOK_URL=
-
-# Google Calendar (private — via service account)
-GOOGLE_CALENDAR_ID=
-GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=
-
-# Optional — override Gemini model
-GEMINI_MODEL=gemini-2.0-flash
+cp daily_briefing/.env.example daily_briefing/.env
 ```
