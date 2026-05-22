@@ -92,5 +92,5 @@ See `daily_briefing/.env.example` for the full list. At runtime, `main.py` calls
 
 - [Plan](../plans/plan-daily-briefing-agent.md) — original feature plan and phase breakdown
 - [API Setup Guide](../analysis/api-setup-guide.md) — how to obtain each API key
-- [Google Calendar Private Setup](../analysis/google-calendar-private-setup.md) — Terraform workflow for service account
+- [Google Calendar Private Setup](../analysis/google-calendar-private-setup.md) — service account setup (Terraform managed in [`matthewshan/cloud-infrastructure`](https://github.com/matthewshan/cloud-infrastructure))
 - [K8s Deployment Plan](../plans/plan-adk-k8s-deployment.md) — Phase 2 container + CronJob

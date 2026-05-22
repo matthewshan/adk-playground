@@ -7,9 +7,8 @@ This guide walks through creating a GCP project and granting the daily briefing 
 ## Architecture overview
 
 ```
-Terraform                         Google Cloud
-  └─ google_project           →    New GCP project
-  └─ google_service_account  →    daily-briefing-agent@<project>.iam.gserviceaccount.com
+Terraform (matthewshan/cloud-infrastructure)  Google Cloud (project: adk-agents-496905)
+  └─ google_service_account  →    daily-briefing-agent@adk-agents-496905.iam.gserviceaccount.com
   └─ google_service_account_key → JSON key (base64) → stored in .env locally
 
 Google Calendar (manual step)
@@ -23,6 +22,10 @@ daily_briefing/tools.py
 
 The agent never asks for user consent at runtime — the service account is trusted directly by the calendar.
 
+> **Infrastructure repo:** The Terraform module that manages the service account lives in
+> [`matthewshan/cloud-infrastructure`](https://github.com/matthewshan/cloud-infrastructure)
+> under `terraform-adk-agents/`. State is managed by HCP Terraform.
+
 ---
 
 ## Prerequisites
@@ -30,54 +33,29 @@ The agent never asks for user consent at runtime — the service account is trus
 | Requirement | Notes |
 |---|---|
 | Google account | Any personal Google account works |
-| GCP billing account | Required to enable APIs. Go to [https://console.cloud.google.com/billing](https://console.cloud.google.com/billing), create one if needed. Free tier / $0 credit card on file is sufficient. |
-| Terraform ≥ 1.6 | [Install guide](https://developer.hashicorp.com/terraform/install) |
-| `gcloud` CLI | Run `gcloud auth application-default login` to authenticate Terraform |
+| Access to `matthewshan/cloud-infrastructure` | Terraform changes go here, not in this repo |
+| HCP Terraform access | Runs are triggered automatically via VCS on push to `main` |
 
 ---
 
-## Step 1 — Find your billing account ID
+## Step 1 — Note the service account details
 
-1. Go to [https://console.cloud.google.com/billing](https://console.cloud.google.com/billing).
-2. Click your billing account.
-3. The **Billing account ID** is shown in the format `XXXXXX-XXXXXX-XXXXXX`. Copy it.
+The GCP project and service account are already provisioned by Terraform in
+[`matthewshan/cloud-infrastructure`](https://github.com/matthewshan/cloud-infrastructure).
+No local Terraform run is needed.
 
----
-
-## Step 2 — Run Terraform
-
-The Terraform configuration lives in `terraform/google-calendar-sa/`. State is stored locally in `terraform.tfstate` — keep that file out of source control (it's already in `.gitignore`).
-
-```bash
-cd terraform/google-calendar-sa
-
-# Authenticate with Google
-gcloud auth application-default login
-
-# Initialise providers
-terraform init
-
-# Preview what will be created (a new project, Calendar API enablement, service account + key)
-terraform plan \
-  -var="project_id=daily-briefing-<your-handle>" \
-  -var="billing_account=XXXXXX-XXXXXX-XXXXXX"
-
-# Apply
-terraform apply \
-  -var="project_id=daily-briefing-<your-handle>" \
-  -var="billing_account=XXXXXX-XXXXXX-XXXXXX"
-```
-
-> `project_id` must be globally unique across all of Google Cloud, lowercase letters/numbers/hyphens, max 30 characters. Example: `daily-briefing-matthewshan`.
-
-After `apply` completes, note the two outputs:
-
-| Output | What to do with it |
+| Value | Details |
 |---|---|
-| `service_account_email` | Copy this — you will paste it into Google Calendar |
-| `service_account_key_base64` | Run `terraform output -raw service_account_key_base64` and save to `.env` |
+| GCP project | `adk-agents-496905` |
+| Service account email | `daily-briefing-agent@adk-agents-496905.iam.gserviceaccount.com` |
 
-> The key is marked `sensitive` in Terraform state. Run the command above to retrieve it — it will not appear in plan/apply output.
+To retrieve the base64-encoded JSON key, go to the HCP Terraform workspace
+`terraform-adk-agents` → **Outputs** → `service_account_key_base64` → **Reveal**.
+Copy the value and add it to `.env` as `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`.
+
+> If you need to re-provision or rotate the key, make changes in
+> `matthewshan/cloud-infrastructure/terraform-adk-agents/` and merge to `main` —
+> HCP Terraform will plan and apply automatically.
 
 ---
 
@@ -144,14 +122,9 @@ If you see a `403 Forbidden` from the Google API, the calendar has not been shar
 
 Service account keys should be rotated periodically. To rotate:
 
-```bash
-cd terraform/google-calendar-sa
-
-# Terraform destroys the old key resource and creates a new one
-terraform apply \
-  -var="project_id=<your-project-id>" \
-  -var="billing_account=XXXXXX-XXXXXX-XXXXXX"
-
-# Retrieve the new key and update .env (and k8s Secret when deploying)
-terraform output -raw service_account_key_base64
-```
+1. In `matthewshan/cloud-infrastructure/terraform-adk-agents/main.tf`, taint the key
+   resource or use `terraform taint` locally (speculative plan only — trigger a destroy/recreate
+   via the HCP Terraform UI: **Actions → Start new run → Destroy and recreate**).
+2. After apply, retrieve the new key from the HCP Terraform workspace:
+   **Outputs** → `service_account_key_base64` → **Reveal**.
+3. Update `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` in `.env` and in any deployed Kubernetes Secrets.
