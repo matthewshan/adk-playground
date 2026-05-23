@@ -150,12 +150,57 @@ def _get_recent_results(
                 ]
                 day_label = "Today" if check_date == today else "Yesterday"
                 sd = status_type.get("shortDetail", "Final")
+                preseason_suffix = " (Preseason)" if _is_preseason_event(event) else ""
                 recent_results.append(
-                    (check_date, f"{day_label}: {' vs '.join(score_parts)} — {sd}")
+                    (
+                        check_date,
+                        f"{day_label}: {' vs '.join(score_parts)} — {sd}{preseason_suffix}",
+                    )
                 )
         except requests.RequestException:
             pass  # recent data is best-effort
     return recent_results
+
+
+def _is_preseason_event(event: dict) -> bool:
+    """Return True when ESPN event metadata indicates a preseason game."""
+    season = event.get("season") or {}
+    if season.get("type") == 1:
+        return True
+    status_type = (event.get("status") or {}).get("type", {})
+    tokens = [
+        str(season.get("slug", "")),
+        str(status_type.get("name", "")),
+        str(status_type.get("description", "")),
+        str(status_type.get("detail", "")),
+        str(status_type.get("shortDetail", "")),
+        str((event.get("week") or {}).get("text", "")),
+    ]
+    return any("preseason" in token.lower() for token in tokens)
+
+
+def _format_upcoming_event_line(event: dict, event_dt: datetime.datetime) -> str:
+    """Format one upcoming/live event line."""
+    status_type = (event.get("status") or {}).get("type", {})
+    short_detail: str = status_type.get("shortDetail", "")
+    comps = event.get("competitions", [])
+    score_parts = [
+        f"{(c.get('team') or {}).get('displayName', '')} {c.get('score', '')}".strip()
+        for c in comps[0].get("competitors", [])
+    ]
+    score_str = " vs ".join(score_parts)
+
+    # Strip leading "M/D - " from shortDetail; fall back to UTC-4 (EDT) derivation
+    time_part = re.sub(r"^\d+/\d+\s*-\s*", "", short_detail).strip()
+    if not time_part or time_part.lower() in ("scheduled", "tbd"):
+        local_hour = (event_dt.hour - 4) % 24
+        am_pm = "PM" if local_hour >= 12 else "AM"
+        h12 = local_hour % 12 or 12
+        time_part = f"{h12}:{event_dt.strftime('%M')} {am_pm} EDT"
+    event_date = event_dt.date()
+    date_str = f"{event_date.strftime('%b')} {event_date.day}"
+    preseason_suffix = " (Preseason)" if _is_preseason_event(event) else ""
+    return f"{date_str} @ {time_part} — {score_str}{preseason_suffix}"
 
 
 def _get_upcoming_games(
@@ -193,23 +238,48 @@ def _get_upcoming_games(
         if status_type.get("completed", False):
             continue  # already captured in recent_results
 
-        short_detail: str = status_type.get("shortDetail", "")
-        score_parts = [
-            f"{(c.get('team') or {}).get('displayName', '')} {c.get('score', '')}".strip()
-            for c in comps[0].get("competitors", [])
-        ]
-        score_str = " vs ".join(score_parts)
+        upcoming.append((event_date, _format_upcoming_event_line(event, event_dt)))
 
-        # Strip leading "M/D - " from shortDetail; fall back to UTC-4 (EDT) derivation
-        time_part = re.sub(r"^\d+/\d+\s*-\s*", "", short_detail).strip()
-        if not time_part or time_part.lower() in ("scheduled", "tbd"):
-            local_hour = (event_dt.hour - 4) % 24
-            am_pm = "PM" if local_hour >= 12 else "AM"
-            h12 = local_hour % 12 or 12
-            time_part = f"{h12}:{event_dt.strftime('%M')} {am_pm} EDT"
-        date_str = f"{event_date.strftime('%b')} {event_date.day}"
-        upcoming.append((event_date, f"{date_str} @ {time_part} — {score_str}"))
+    upcoming.sort(key=lambda x: x[0])
+    return upcoming
 
+
+def _get_today_scoreboard_upcoming_games(
+    sport: str, league: str, team_name: str, today: datetime.date
+) -> list[tuple[datetime.date, str]]:
+    """Fallback: get today's live/scheduled games from scoreboard."""
+    upcoming: list[tuple[datetime.date, str]] = []
+    try:
+        sb_resp = requests.get(
+            f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard",
+            params={"dates": today.strftime("%Y%m%d")},
+            timeout=10,
+        )
+        sb_resp.raise_for_status()
+        for event in sb_resp.json().get("events", []):
+            if team_name.lower() not in event.get("name", "").lower():
+                continue
+            status_type = (event.get("status") or {}).get("type", {})
+            if status_type.get("completed", False):
+                continue
+            event_date_str = event.get("date", "")
+            if not event_date_str:
+                continue
+            try:
+                event_dt = datetime.datetime.fromisoformat(
+                    event_date_str.replace("Z", "+00:00")
+                )
+            except ValueError:
+                continue
+            event_date = event_dt.date()
+            if event_date < today:
+                continue
+            comps = event.get("competitions", [])
+            if not comps:
+                continue
+            upcoming.append((event_date, _format_upcoming_event_line(event, event_dt)))
+    except requests.RequestException:
+        pass
     upcoming.sort(key=lambda x: x[0])
     return upcoming
 
@@ -307,6 +377,10 @@ def get_sports_scores(teams: list[TrackedTeam]) -> str:
 
         recent_results = _get_recent_results(sport, league, team_name, today, yesterday)
         upcoming = _get_upcoming_games(sched_events, today)
+        if not upcoming:
+            upcoming = _get_today_scoreboard_upcoming_games(
+                sport, league, team_name, today
+            )
 
         # Off-season: no recent games and next game is more than 30 days out
         next_date = upcoming[0][0] if upcoming else None
