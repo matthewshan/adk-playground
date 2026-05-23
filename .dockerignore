@@ -7,7 +7,6 @@ __pycache__/
 .github/
 .vscode/
 docs/
-terraform/
 minimal_ollama_adk/
 *.md
 .tools/

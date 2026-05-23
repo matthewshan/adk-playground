@@ -1,6 +1,8 @@
 # Google Calendar — Private Calendar Setup Guide
 
-This guide walks through creating a GCP project and granting the daily briefing agent read-only access to a private Google Calendar using a service account. Terraform provisions everything; one manual step shares the calendar with the service account email.
+This guide walks through creating a GCP project and granting the daily briefing agent read-only access to a private Google Calendar using a service account. Terraform in the external
+[`matthewshan/cloud-infrastructure/tree/main/terraform-adk-agents`](https://github.com/matthewshan/cloud-infrastructure/tree/main/terraform-adk-agents)
+repository provisions everything; one manual step shares the calendar with the service account email.
 
 ---
 
@@ -46,10 +48,13 @@ The agent never asks for user consent at runtime — the service account is trus
 
 ## Step 2 — Run Terraform
 
-The Terraform configuration lives in `terraform/google-calendar-sa/`. State is stored locally in `terraform.tfstate` — keep that file out of source control (it's already in `.gitignore`).
+The Terraform configuration lives in
+[`matthewshan/cloud-infrastructure/tree/main/terraform-adk-agents`](https://github.com/matthewshan/cloud-infrastructure/tree/main/terraform-adk-agents).
+Clone that repo and work from `cloud-infrastructure/terraform-adk-agents/`. State is stored locally in `terraform.tfstate`, so keep that file out of source control.
 
 ```bash
-cd terraform/google-calendar-sa
+git clone https://github.com/matthewshan/cloud-infrastructure.git
+cd cloud-infrastructure/terraform-adk-agents
 
 # Authenticate with Google
 gcloud auth application-default login
@@ -145,7 +150,7 @@ If you see a `403 Forbidden` from the Google API, the calendar has not been shar
 Service account keys should be rotated periodically. To rotate:
 
 ```bash
-cd terraform/google-calendar-sa
+cd cloud-infrastructure/terraform-adk-agents
 
 # Terraform destroys the old key resource and creates a new one
 terraform apply \

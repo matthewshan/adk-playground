@@ -82,7 +82,9 @@ Setting up a private Google Calendar requires a GCP service account. See the ded
 
 ### How access works
 
-Terraform handles the GCP side; calendar sharing is a one-time manual step:
+Terraform in the external
+[`cloud-infrastructure/terraform-adk-agents`](https://github.com/matthewshan/cloud-infrastructure/tree/main/terraform-adk-agents)
+directory handles the GCP side; calendar sharing is a one-time manual step:
 
 1. **Terraform provisions** (automated):
    - Enables the Calendar API in your GCP project
@@ -108,10 +110,11 @@ GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=<base64-encoded service account JSON>
 
 ## 5. `.env.example` reference
 
-A complete `.env.example` is at the repo root. Copy it to `.env` and fill in your values before running locally:
+The daily briefing example env file lives at `daily_briefing/.env.example`. Copy it to
+`daily_briefing/.env` and fill in your values before running locally:
 
 ```bash
-cp .env.example .env
+cp daily_briefing/.env.example daily_briefing/.env
 ```
 
 ```dotenv
