@@ -108,10 +108,11 @@ GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=<base64-encoded service account JSON>
 
 ## 5. `.env.example` reference
 
-A complete `.env.example` is at the repo root. Copy it to `.env` and fill in your values before running locally:
+The daily briefing example env file lives at `daily_briefing/.env.example`. Copy it to
+`daily_briefing/.env` and fill in your values before running locally:
 
 ```bash
-cp .env.example .env
+cp daily_briefing/.env.example daily_briefing/.env
 ```
 
 ```dotenv

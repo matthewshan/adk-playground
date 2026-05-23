@@ -74,7 +74,7 @@ Per team the tool returns: **record**, **recent completed games** (yesterday + t
 ## Environment variables
 
 See `daily_briefing/.env.example` for the full list. At runtime, `main.py` calls
-`load_dotenv()` to load values from a `.env` file in the repo root.
+`load_dotenv()` to load values from `daily_briefing/.env`.
 
 ---
 

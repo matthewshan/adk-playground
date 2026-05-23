@@ -1,25 +1,43 @@
-# Minimal ADK + Ollama Test
+# ADK Playground
 
-This project is a deliberately small Python ADK smoke test wired to a local Ollama server.
+This repository is a Python / Google ADK playground with two projects:
 
-It is optimized for the lightest possible local model first, not for quality. The default model is `smollm2:135m`.
+- `minimal_ollama_adk/`: a tiny local ADK smoke test backed by Ollama
+- `daily_briefing/`: a morning digest agent that gathers weather, news, sports, and calendar data, then sends the briefing to Discord
 
-On this machine, `smollm2:135m` proved that the stack is connected, while `qwen2.5:0.5b` gave noticeably better short-chat behavior.
+## Repository layout
 
-## What is here
-
-- `minimal_ollama_adk/agent.py`: the root ADK agent
-- `minimal_ollama_adk/main.py`: a programmatic smoke test using `InMemoryRunner`
-- `docs/context-engineering.md`: notes on how to keep prompts and context small for weak local models
-- `requirements.txt`: Python dependencies for a non-venv install
+```text
+minimal_ollama_adk/   Minimal local Ollama example
+daily_briefing/       Main daily briefing agent
+docs/                 Architecture, setup, prompt, and deployment notes
+terraform/            Google Calendar service-account provisioning
+requirements.txt      Shared Python dependencies
+```
 
 ## Install
 
-### Install Ollama
+Install Python dependencies:
 
-This repo is set up to work with a workspace-local Ollama binary so you do not need a root install.
+```bash
+python3 -m pip install --user -r requirements.txt
+```
 
-Rootless local install:
+If `adk` is not on your `PATH` afterwards:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+On Arch-like systems you may also need `--break-system-packages`.
+
+## Project 1: `minimal_ollama_adk`
+
+This is the smallest local smoke test in the repo. It is optimized for proving the stack is wired up, not for output quality.
+
+### Install Ollama locally
+
+The repo supports a workspace-local Ollama install so you do not need a root install:
 
 ```bash
 mkdir -p .tools/ollama
@@ -28,32 +46,9 @@ tar --zstd -xf .tools/ollama/ollama-linux-amd64.tar.zst -C .tools/ollama
 ./.tools/ollama/bin/ollama --version
 ```
 
-If you prefer a system install instead:
+### Run the local smoke test
 
-- Arch / CachyOS: `sudo pacman -S ollama`
-- Other Linux distributions: use the package manager or install instructions from the Ollama docs
-
-### Install Python dependencies
-
-Install the Python dependencies with your system Python:
-
-```bash
-python3 -m pip install --user -r requirements.txt
-```
-
-If `adk` is not on your shell `PATH` afterwards, add:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Note: on Arch-like systems, you may need to add `--break-system-packages` because the system Python environment is externally managed.
-
-This project already includes a local `.env` file. The Python entrypoint loads it automatically.
-
-## Run
-
-Start the local Ollama server from this workspace:
+Start Ollama:
 
 ```bash
 export OLLAMA_HOST=127.0.0.1:11434
@@ -61,99 +56,117 @@ export OLLAMA_MODELS="$PWD/.ollama/models"
 ./.tools/ollama/bin/ollama serve
 ```
 
-In another shell, point ADK to the server:
+In another shell:
 
 ```bash
 export OLLAMA_API_BASE=http://127.0.0.1:11434
 export OLLAMA_MODEL=qwen2.5:0.5b
 ```
 
-If you want the more usable small-model path immediately, use:
-
-```bash
-export OLLAMA_MODEL=qwen2.5:0.5b
-```
-
-Pull the smallest model:
+Pull a small model:
 
 ```bash
 ./.tools/ollama/bin/ollama pull smollm2:135m
 ```
 
-## Smoke tests
-
-Direct Ollama test:
+Smoke test the Ollama server directly:
 
 ```bash
 ./.tools/ollama/bin/ollama run smollm2:135m "Reply with exactly: ollama is working"
 ```
 
-Programmatic ADK test:
+Run the ADK example:
 
 ```bash
-python -m minimal_ollama_adk.main "Reply with exactly: adk is working"
+python3 -m minimal_ollama_adk.main "Reply with exactly: adk is working"
 ```
 
-Interactive prompt mode:
+Interactive mode:
 
 ```bash
-python -m minimal_ollama_adk.main
+python3 -m minimal_ollama_adk.main
 ```
 
-Type your own prompts at `prompt>` and use `exit` or `quit` to stop.
+## Project 2: `daily_briefing`
 
-ADK CLI test:
+The daily briefing agent supports two model backends:
+
+- `BACKEND=gemini` (default)
+- `BACKEND=ollama`
+
+Environment variables are loaded from `/home/runner/work/adk-playground/adk-playground/daily_briefing/.env`, not from the repo root.
+
+### Configure environment
+
+Copy the example file and fill in the values you need:
 
 ```bash
-export OLLAMA_API_BASE=http://127.0.0.1:11434
-export OLLAMA_MODEL=qwen2.5:0.5b
-adk run minimal_ollama_adk "Say hello in one short sentence."
+cp daily_briefing/.env.example daily_briefing/.env
 ```
 
----
+Key variables:
 
-## Daily Briefing — Google Calendar service account (Terraform)
+- `BACKEND`
+- `GEMINI_API_KEY` and optional `GEMINI_MODEL`
+- `OLLAMA_API_BASE` and `OLLAMA_MODEL` when using Ollama
+- `GNEWS_API_KEY`
+- `DISCORD_WEBHOOK_URL`
+- `GOOGLE_CALENDAR_ID`
+- `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`
 
-The Calendar integration requires a GCP service account provisioned by Terraform.
-The configuration lives in `terraform/modules/google-calendar-sa/`.
+### Run the daily briefing agent
 
-### Prerequisites
+```bash
+python3 -m daily_briefing.main
+```
 
-| Requirement | Notes |
-|---|---|
-| Terraform ≥ 1.6 | [Install](https://developer.hashicorp.com/terraform/install) |
-| `gcloud` CLI | [Install](https://cloud.google.com/sdk/docs/install) |
-| Existing GCP project | Create one at [console.cloud.google.com](https://console.cloud.google.com) — billing account must be linked to enable APIs |
+### Run local smoke tests
 
-### Commands
+Tool smoke tests:
+
+```bash
+python3 daily_briefing/test_apis.py
+```
+
+Agent test runner that prints the digest locally instead of posting to Discord:
+
+```bash
+python3 daily_briefing/test_agent.py
+```
+
+### Docker
+
+Build the daily briefing container:
+
+```bash
+docker build -t daily-briefing -f daily_briefing/Dockerfile .
+```
+
+## Google Calendar service account (Terraform)
+
+The private Google Calendar integration uses Terraform in `terraform/modules/google-calendar-sa/`.
 
 ```bash
 cd terraform/modules/google-calendar-sa
-
-# Authenticate Terraform with Google
 gcloud auth application-default login
-
-# Initialise providers
 terraform init
-
-# Preview (replace with your existing GCP project ID)
 terraform plan -var="project_id=<your-project-id>"
-
-# Apply
 terraform apply -var="project_id=<your-project-id>"
-
-# Retrieve the service account key and save to .env
 terraform output -raw service_account_key_base64
 ```
 
-After `apply`, share your Google Calendar with the `service_account_email` output (Viewer permission).
-Full details: [`docs/analysis/google-calendar-private-setup.md`](docs/analysis/google-calendar-private-setup.md)
+After `apply`, share your Google Calendar with the `service_account_email` output.
 
----
+## Docs
+
+- [`docs/architecture/daily-briefing-design.md`](docs/architecture/daily-briefing-design.md)
+- [`docs/analysis/api-setup-guide.md`](docs/analysis/api-setup-guide.md)
+- [`docs/analysis/google-calendar-private-setup.md`](docs/analysis/google-calendar-private-setup.md)
+- [`docs/plans/plan-adk-k8s-deployment.md`](docs/plans/plan-adk-k8s-deployment.md)
+- [`docs/context-engineering.md`](docs/context-engineering.md)
 
 ## Notes
 
-- `smollm2:135m` is tiny and useful mainly for proving the plumbing works.
-- If output quality is too weak, switch to `qwen2.5:0.5b` by changing `OLLAMA_MODEL`.
-- On this machine, `qwen2.5:0.5b` behaved better for short chat prompts, but tiny local models still did not follow exact-string prompts perfectly.
-- This repo keeps the Ollama binary and model cache local to the workspace to avoid needing a root install.
+- `smollm2:135m` is useful mainly for proving the minimal Ollama path works.
+- `qwen2.5:0.5b` produced better short-chat behavior in earlier local testing.
+- The repo keeps Ollama binaries and model cache local to the workspace to avoid requiring a root install.
