@@ -82,7 +82,9 @@ Setting up a private Google Calendar requires a GCP service account. See the ded
 
 ### How access works
 
-Terraform handles the GCP side; calendar sharing is a one-time manual step:
+Terraform in the external
+[`cloud-infrastructure/terraform-adk-agents`](https://github.com/matthewshan/cloud-infrastructure/tree/main/terraform-adk-agents)
+directory handles the GCP side; calendar sharing is a one-time manual step:
 
 1. **Terraform provisions** (automated):
    - Enables the Calendar API in your GCP project

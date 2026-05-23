@@ -11,7 +11,6 @@ This repository is a Python / Google ADK playground with two projects:
 minimal_ollama_adk/   Minimal local Ollama example
 daily_briefing/       Main daily briefing agent
 docs/                 Architecture, setup, prompt, and deployment notes
-terraform/            Google Calendar service-account provisioning
 requirements.txt      Shared Python dependencies
 ```
 
@@ -144,10 +143,12 @@ docker build -t daily-briefing -f daily_briefing/Dockerfile .
 
 ## Google Calendar service account (Terraform)
 
-The private Google Calendar integration uses Terraform in `terraform/modules/google-calendar-sa/`.
+The private Google Calendar integration now uses the Terraform config in
+[`matthewshan/cloud-infrastructure/tree/main/terraform-adk-agents`](https://github.com/matthewshan/cloud-infrastructure/tree/main/terraform-adk-agents).
 
 ```bash
-cd terraform/modules/google-calendar-sa
+git clone https://github.com/matthewshan/cloud-infrastructure.git
+cd cloud-infrastructure/terraform-adk-agents
 gcloud auth application-default login
 terraform init
 terraform plan -var="project_id=<your-project-id>"

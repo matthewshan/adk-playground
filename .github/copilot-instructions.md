@@ -27,7 +27,7 @@ docs/
     daily-briefing-design.md           # Module layout, data flow, API table, design decisions
   analysis/
     api-setup-guide.md                 # How to obtain each API key (GNews, Gemini, Discord, Calendar)
-    google-calendar-private-setup.md   # Terraform workflow for Google Calendar service account
+    google-calendar-private-setup.md   # External Terraform workflow for Google Calendar service account
   plans/
     plan-daily-briefing-agent.md       # Original feature plan and phase breakdown
     plan-adk-k8s-deployment.md         # Phase 2: container image + Kubernetes CronJob
@@ -53,7 +53,6 @@ adk-playground/
       calendar_events.py  # Google Calendar v3
       discord_webhook.py  # Discord webhook delivery
   docs/                   # See index above
-  terraform/              # Google Calendar service account provisioning
   test_free_apis.py       # Smoke tests for no-key APIs (weather, sports)
   requirements.txt
 ```
