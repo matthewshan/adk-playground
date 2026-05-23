@@ -1,6 +1,13 @@
 # Plan: Daily Briefing ADK Agent
 
-A morning digest agent that fetches weather for Grand Rapids MI, breaking news (including cloud tech and AI), sports scores for favourite teams (Detroit Lions, Toronto Blue Jays, Hamilton TiCats), and Google Calendar events, uses Gemini Flash to write a friendly summary, and delivers it to Discord — triggered every morning by a k8s CronJob.
+This document captures the original build plan for the daily briefing agent. The current
+implementation lives under `daily_briefing/` and the architecture source of truth is
+`docs/architecture/daily-briefing-design.md`.
+
+The implemented app fetches weather for Grand Rapids MI, breaking news (including cloud
+and AI), sports updates for Detroit Lions, Toronto Blue Jays, and Hamilton Tiger-Cats,
+and Google Calendar events, uses Gemini Flash or Ollama to write a friendly summary,
+and delivers it to Discord on a schedule.
 
 ---
 
@@ -8,12 +15,12 @@ A morning digest agent that fetches weather for Grand Rapids MI, breaking news (
 
 ```
 Run once daily at 7 AM
-  ├─ Fetch weather         → Open-Meteo (no key)
-  ├─ Fetch top news        → NewsAPI free tier
-  ├─ Fetch sports scores   → ESPN public scoreboard API (no key)
-  ├─ Fetch calendar events → Google Calendar API
-  ├─ Summarize all four    → Gemini 2.0 Flash (free tier)
-  └─ Post to Discord       → Webhook POST
+- Fetch weather         → Open-Meteo (no key)
+- Fetch top news        → GNews
+- Fetch sports scores   → ESPN public API + TheSportsDB fallback for CFL
+- Fetch calendar events → Google Calendar API v3 via service account
+- Summarize all four    → Gemini 3.5 Flash or Ollama
+- Post to Discord       → Webhook POST
 ```
 
 The entry point (`main.py`) runs the ADK agent with a single prompt. The agent decides which tools to call, collects the results, writes the digest, and calls `send_discord`. No interactive loop; the process exits when done.
@@ -24,11 +31,13 @@ The entry point (`main.py`) runs the ADK agent with a single prompt. The agent d
 
 ```
 daily_briefing/
-  __init__.py
-  instruction.md   ← system prompt (edit without touching code)
-  tools.py         ← one function per data source
-  agent.py         ← ADK Agent wiring tools + model
-  main.py          ← single-shot runner
+- __init__.py
+- agent.py
+- apis/            ← raw HTTP clients
+- instruction.md
+- main.py
+- smoke_tests/     ← runnable smoke tests and local agent runner
+- tools/           ← ADK-facing tool functions and orchestration
 ```
 
 ---
@@ -37,11 +46,11 @@ daily_briefing/
 
 | Concern | Choice |
 |---|---|
-| LLM | `gemini-2.0-flash` via [Google AI Studio](https://aistudio.google.com/app/apikey) free API key |
+| LLM | `gemini-3.5-flash` by default, or a local Ollama model via `LiteLlm` |
 | Weather | Open-Meteo — free, no key |
-| News | NewsAPI.org developer tier — free, 100 req/day |
-| Sports | ESPN public scoreboard API — free, no key; covers NFL, MLB, CFL |
-| Calendar | Google Calendar API v3 |
+| News | GNews — key required |
+| Sports | ESPN public API plus TheSportsDB fallback for current CFL schedule gaps |
+| Calendar | Google Calendar API v3 via service account |
 | Delivery | Discord webhook |
 | Schedule | k8s CronJob (details below) |
 | Image | `ghcr.io/matthewshan/daily-briefing` via GitHub Actions |
@@ -50,51 +59,50 @@ daily_briefing/
 
 ## Phase 1 — Data tools
 
-Build and test each tool function in isolation before wiring up the agent. Each function is a plain Python function that takes typed arguments and returns a string. ADK picks them up automatically.
+Build the raw API clients under `daily_briefing/apis/` first, then keep formatting and
+agent-facing logic in `daily_briefing/tools/`. Each exported tool remains a plain Python
+callable that returns a string, so ADK can discover it without extra schemas.
 
-**`tools.py` functions:**
+**Current tool modules:**
 
-`get_weather(latitude: float, longitude: float) -> str`
+`tools/weather.py`
 - Open-Meteo endpoint; default coords Grand Rapids, MI (42.96, -85.67)
 - Returns a one-line string: `"72°F, clear sky, wind 8 mph"`
 - No API key
 
-`get_news() -> str`
-- NewsAPI top headlines, English, top 5
-- Additionally fetches headlines filtered by topics `"cloud computing"` and `"artificial intelligence"` to surface the latest cloud and AI advancements
+`tools/news.py`
+- GNews top headlines, English
+- Includes general headlines plus cloud/AI coverage in the formatted result
 - Returns a bulleted list of headline + source
-- Requires `NEWS_API_KEY` from env
+- Requires `GNEWS_API_KEY` from env
 
-`get_sports_scores() -> str`
-- ESPN scoreboard endpoints for NFL, MLB, CFL
-  - `site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`
-  - `site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard`
-  - `site.api.espn.com/apis/site/v2/sports/football/cfl/scoreboard`
-- Favourite teams to highlight: **Detroit Lions** (NFL), **Toronto Blue Jays** (MLB), **Hamilton TiCats** (CFL)
-- Returns final scores per league, or `"No games (off-season)"` if scoreboard is empty
+`tools/sports.py`
+- ESPN team lookup, records, schedules, same-day scoreboard checks, and standings
+- TheSportsDB fallback when ESPN does not have current CFL schedule data
+- Favourite teams to highlight: **Detroit Lions** (NFL), **Toronto Blue Jays** (MLB), **Hamilton Tiger-Cats** (CFL)
+- Returns recent results, upcoming games, and off-season messaging per tracked team
 - No API key
 
-`get_calendar_events() -> str`
+`tools/calendar_events.py`
 - Google Calendar API v3, events for today
-- Auth: API key for public calendars; service account JSON for private (see note below)
-- Requires `GOOGLE_CALENDAR_API_KEY` and `GOOGLE_CALENDAR_ID` from env
+- Auth: service account JSON for private calendars
+- Requires `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` and `GOOGLE_CALENDAR_ID` from env
 - Returns a bulleted list of event titles + times, or `"Nothing scheduled"`
 
-`send_discord(message: str) -> str`
+`tools/discord_webhook.py`
 - `POST` to `DISCORD_WEBHOOK_URL` from env
 - Returns `"Sent"` on success; raises on HTTP error so the agent reports the failure
 
-**Private Google Calendar note:** API keys only work for public calendars. For a private calendar, create a service account in Google Cloud Console, share the calendar with the service account email (view-only), download the JSON key, base64-encode it, and store it in Infisical as `google-calendar-service-account-json`. Update `tools.py` to decode and load it via `google.oauth2.service_account.Credentials`.
+**Private Google Calendar note:** the current implementation uses a service account only.
+Create the service account in Google Cloud, share the calendar with the service account
+email (view-only), base64-encode the JSON key, and pass it via
+`GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`.
 
-**Smoke test for each tool:**
-```python
-# run standalone before wiring to ADK
-from daily_briefing.tools import get_weather, get_news, get_sports_scores, get_calendar_events
-print(get_weather(42.96, -85.67))
-print(get_news())
-print(get_sports_scores())
-print(get_calendar_events())
-```
+**Smoke tests:**
+
+- `python daily_briefing/smoke_tests/test_apis.py` exercises all tools with live API calls.
+- `python daily_briefing/smoke_tests/test_sports.py` runs sports unit tests, then a live sports smoke test.
+- `python daily_briefing/smoke_tests/test_agent.py` runs the agent and prints the digest instead of posting to Discord.
 
 ---
 
@@ -110,10 +118,10 @@ Call each tool to collect the data, then compose a single Discord message.
 Rules:
 1. Stay under 1800 characters total.
 2. Use this section order with emoji headers:
-   ☀️ **Weather** — one sentence (Grand Rapids, MI)
-   📰 **News** — up to 3 general headlines + up to 2 cloud/AI highlights
-   🏈⚾🏈 **Sports** — always show Detroit Lions, Toronto Blue Jays, and Hamilton TiCats results first; omit leagues with no active games
-   📅 **Calendar** — bullet list; say "Nothing scheduled" if empty
+    - ☀️ **Weather** — one sentence (Grand Rapids, MI)
+    - 📰 **News** — up to 3 general headlines + up to 2 cloud/AI highlights
+    - 🏈⚾🏈 **Sports** — always show Detroit Lions, Toronto Blue Jays, and Hamilton Tiger-Cats results first; omit leagues with no active games
+    - 📅 **Calendar** — bullet list; say "Nothing scheduled" if empty
 3. End with one short motivational sentence.
 4. Never invent data. If a tool failed, say so briefly in that section.
 5. Send the finished message using send_discord. Do not ask for confirmation.
@@ -123,17 +131,27 @@ Rules:
 
 ```python
 import os
+from pathlib import Path
 from google.adk import Agent
+from google.adk.models.lite_llm import LiteLlm
 from daily_briefing.tools import (
     get_weather, get_news, get_sports_scores,
     get_calendar_events, send_discord,
 )
 
+instruction = (Path("daily_briefing") / "instruction.md").read_text(encoding="utf-8")
+
+backend = os.getenv("BACKEND", "gemini").lower()
+if backend == "ollama":
+    model = LiteLlm(model=f"ollama_chat/{os.getenv('OLLAMA_MODEL', 'qwen2.5:7b')}")
+else:
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
 root_agent = Agent(
     name="daily_briefing",
-    model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+    model=model,
     description="Daily morning digest agent.",
-    instruction=open("daily_briefing/instruction.md").read(),
+    instruction=instruction,
     tools=[get_weather, get_news, get_sports_scores, get_calendar_events, send_discord],
 )
 ```
@@ -142,13 +160,14 @@ root_agent = Agent(
 
 ```python
 import asyncio
+from pathlib import Path
 from dotenv import load_dotenv
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 from daily_briefing.agent import root_agent
 
 async def run():
-    load_dotenv()
+    load_dotenv(Path("daily_briefing") / ".env")
     runner = InMemoryRunner(agent=root_agent, app_name="daily_briefing")
     session = await runner.session_service.create_session(
         app_name="daily_briefing", user_id="scheduler"
@@ -160,7 +179,7 @@ async def run():
             role="user",
             parts=[types.Part.from_text(
                 "Fetch weather for Grand Rapids MI, top news plus the latest cloud and AI news, "
-                "NFL/MLB/CFL scores (highlight Detroit Lions, Toronto Blue Jays, Hamilton TiCats), "
+                "NFL/MLB/CFL scores (highlight Detroit Lions, Toronto Blue Jays, Hamilton Tiger-Cats), "
                 "and today's calendar events. Write and send the morning digest."
             )],
         ),
@@ -176,7 +195,7 @@ if __name__ == "__main__":
 
 **End-to-end local test:**
 ```bash
-cp .env.example .env  # fill in keys
+cp daily_briefing/.env.example daily_briefing/.env  # fill in keys
 python -m daily_briefing.main
 # expect a Discord message to arrive
 ```
@@ -225,7 +244,7 @@ google-api-python-client
 **Local container test before pushing:**
 ```bash
 docker build -t daily-briefing .
-docker run --env-file .env daily-briefing
+docker run --env-file daily_briefing/.env daily-briefing
 ```
 
 ---
@@ -239,15 +258,15 @@ Standard service pattern in `k3s-homelab/services/daily-briefing/` — same stru
 - `cronjob.yaml` — `schedule: "0 7 * * *"`, `timeZone: "America/Detroit"`, `envFrom: briefing-secrets`, `restartPolicy: OnFailure`
 - `kustomization.yaml` — references the three above
 
-**Infisical keys to provision before first sync:**
+**Environment values to provision before first sync:**
 
 | Key | Source |
 |---|---|
-| `google-api-key` | Google AI Studio |
-| `news-api-key` | newsapi.org developer account |
-| `discord-daily-briefing-webhook` | Discord → Server Settings → Integrations → Webhooks |
-| `google-calendar-api-key` | Google Cloud Console → APIs & Services → Credentials |
-| `google-calendar-id` | Google Calendar → Calendar Settings → Calendar ID |
+| `GEMINI_API_KEY` | Google AI Studio |
+| `GNEWS_API_KEY` | GNews account |
+| `DISCORD_WEBHOOK_URL` | Discord → Server Settings → Integrations → Webhooks |
+| `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Terraform output from the Google Calendar setup |
+| `GOOGLE_CALENDAR_ID` | Google Calendar → Calendar Settings → Calendar ID |
 
 The existing ApplicationSet in `services-appset.yaml` autodiscovers `services/daily-briefing/` — no changes needed there.
 
@@ -263,7 +282,7 @@ kubectl logs -f job/manual-test -n daily-briefing
 
 | Idea | What to change |
 |---|---|
-| Add a stock price | New `get_stock(ticker)` tool in `tools.py`; new line in `instruction.md` |
+| Add a stock price | Add a raw client under `daily_briefing/apis/`, a new tool module under `daily_briefing/tools/`, and a new line in `instruction.md` |
 | SMS instead of / in addition to Discord | Swap or add a `send_sms()` tool (Twilio free trial) |
 | Route through n8n | Replace `send_discord()` with a POST to an n8n webhook; n8n handles multi-channel fan-out |
 | Try a local LLM | Change `GEMINI_MODEL` env var to an Ollama model string; use `LiteLlm` wrapper as in `minimal_ollama_adk` |

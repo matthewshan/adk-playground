@@ -2,9 +2,10 @@
 
 ## Overview
 
-A single-shot morning digest agent built on **Google ADK** and **Gemini 2.0 Flash**.
-On each run it gathers weather, news, sports, and calendar data; asks Gemini to write
-a friendly summary; and posts the result to Discord via webhook.
+A single-shot morning digest agent built on **Google ADK** with a configurable
+**Gemini** or **Ollama** backend. On each run it gathers weather, news, sports, and
+calendar data through tool wrappers over raw API clients, asks the model to write a
+friendly summary, and posts the result to Discord via webhook.
 
 Intended deployment: a **Kubernetes CronJob** running daily at 7 AM.
 
@@ -15,16 +16,30 @@ Intended deployment: a **Kubernetes CronJob** running daily at 7 AM.
 ```
 daily_briefing/
   __init__.py           # package marker
+  Dockerfile            # container image for the scheduled job
   agent.py              # ADK Agent — wires model + tools
   instruction.md        # system prompt (edit without touching code)
   main.py               # InMemoryRunner entry point
+  apis/
+    __init__.py         # package marker for raw API clients
+    discord.py          # Discord webhook POST
+    espn.py             # ESPN team, schedule, scoreboard, standings calls
+    gnews.py            # GNews headlines
+    google_calendar.py  # Google Calendar v3 client
+    open_meteo.py       # Open-Meteo forecast client
+    thesportsdb.py      # TheSportsDB fallback for CFL events
   tools/
-    __init__.py         # re-exports all five tool functions
-    calendar_events.py  # Google Calendar v3 (service account)
-    discord_webhook.py  # Discord incoming webhook delivery
-    news.py             # GNews top headlines
-    sports.py           # ESPN public API — team-centric scores
-    weather.py          # Open-Meteo current + forecast
+    __init__.py         # re-exports tool functions for the agent
+    calendar_events.py  # calendar formatting/orchestration
+    discord_webhook.py  # delivery + Discord size guardrails
+    news.py             # headline formatting/orchestration
+    sports.py           # team-centric sports summary orchestration
+    weather.py          # forecast formatting/orchestration
+  smoke_tests/
+    __init__.py         # package marker
+    test_agent.py       # local runner that prints the digest instead of posting
+    test_apis.py        # live smoke test for all tools
+    test_sports.py      # sports unit tests + live smoke test
 ```
 
 ---
@@ -32,59 +47,76 @@ daily_briefing/
 ## Data flow
 
 ```
-main.py (InMemoryRunner)
-  └─ agent.py (ADK Agent — gemini-2.0-flash)
-       ├─ tools/weather.py          → Open-Meteo API
-       ├─ tools/news.py             → GNews API
-       ├─ tools/sports.py           → ESPN public API
-       ├─ tools/calendar_events.py  → Google Calendar API v3
-       └─ tools/discord_webhook.py  → Discord webhook POST
+main.py / smoke_tests/test_agent.py
+  └─ agent.py (ADK Agent)
+       ├─ tools/weather.py          → apis/open_meteo.py      → Open-Meteo API
+       ├─ tools/news.py             → apis/gnews.py           → GNews API
+       ├─ tools/sports.py           → apis/espn.py            → ESPN public API
+       │                              apis/thesportsdb.py     → TheSportsDB API (CFL fallback)
+       ├─ tools/calendar_events.py  → apis/google_calendar.py → Google Calendar API v3
+       └─ tools/discord_webhook.py  → apis/discord.py         → Discord webhook POST
 ```
 
 ---
 
 ## External APIs
 
-| Tool module        | API                    | Auth                              | Notes                          |
-|--------------------|------------------------|-----------------------------------|--------------------------------|
-| `weather.py`       | Open-Meteo             | None                              | `current` + `hourly` params; `timezone=America/Detroit` |
-| `news.py`          | GNews                  | `GNEWS_API_KEY`                   | 10 general headlines; 100 req/day free tier (localhost only) |
-| `sports.py`        | ESPN public API        | None                              | `/teams`, `/teams/{id}`, `/teams/{id}/schedule`, `/scoreboard?dates=` |
-| `calendar_events.py` | Google Calendar v3   | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Service account; share calendar with SA email |
-| `discord_webhook.py` | Discord webhook      | `DISCORD_WEBHOOK_URL`             | POST; truncates to 2000-char limit |
+| Tool module | Raw client | API | Auth | Notes |
+|-------------|------------|-----|------|-------|
+| `tools/weather.py` | `apis/open_meteo.py` | Open-Meteo | None | `current` + `hourly` params; `timezone=America/Detroit` |
+| `tools/news.py` | `apis/gnews.py` | GNews | `GNEWS_API_KEY` | 10 general headlines; free tier is localhost-only |
+| `tools/sports.py` | `apis/espn.py` | ESPN public API | None | Team lookup, records, schedule, scoreboard, standings |
+| `tools/sports.py` | `apis/thesportsdb.py` | TheSportsDB | None | Fallback for CFL schedules/results when ESPN lacks current data |
+| `tools/calendar_events.py` | `apis/google_calendar.py` | Google Calendar v3 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Service account; share calendar with the SA email |
+| `tools/discord_webhook.py` | `apis/discord.py` | Discord webhook | `DISCORD_WEBHOOK_URL` | POST; caller truncates to the 2000-character limit |
 
 ---
 
-## Sports — tracked teams
+## Sports tool behavior
 
-Defined in `tools/sports.py` as `_TRACKED_TEAMS` (edit to add/remove teams):
+`get_sports_scores()` accepts a list of `TrackedTeam` objects from the caller. The smoke
+tests use the following set:
 
 ```python
-_TRACKED_TEAMS: list[tuple[str, str, str, str]] = [
-    ("MLB", "baseball", "mlb",      "Toronto Blue Jays"),
-    ("NFL", "football", "nfl",      "Detroit Lions"),
-    ("CFL", "football", "cfl",      "Hamilton Tiger-Cats"),
+teams = [
+  TrackedTeam("MLB", "baseball", "mlb", "Toronto Blue Jays"),
+  TrackedTeam("NFL", "football", "nfl", "Detroit Lions"),
+  TrackedTeam("CFL", "football", "cfl", "Hamilton Tiger-Cats"),
 ]
 ```
 
-Per team the tool returns: **record**, **recent completed games** (yesterday + today via scoreboard), and **upcoming games** (next 3 from team schedule). Off-season is detected when no recent games exist and the next game is >30 days away.
+Per team the tool returns a **record** when available, **recent completed games**,
+**upcoming games** (next 3), and best-effort **standings**.
+
+Sports lookup behavior is:
+
+- ESPN is the primary source for team lookup, records, schedules, scoreboard checks, and standings.
+- Same-day upcoming games are checked in scoreboard data so preseason games are not missed.
+- If ESPN has no usable schedule or scoreboard data, the tool falls back to TheSportsDB.
+- When the fallback is used, the W-L record is computed from completed season events.
+- Off-season is detected when there are no recent games and the next game is more than 30 days away.
 
 ---
 
 ## Environment variables
 
-See `daily_briefing/.env.example` for the full list. At runtime, `main.py` calls
-`load_dotenv()` to load values from `daily_briefing/.env`.
+See `daily_briefing/.env.example` for the full list. `main.py` loads
+`daily_briefing/.env` before importing the agent so backend selection and keyed tool
+configuration are available immediately. The smoke tests in `daily_briefing/smoke_tests/`
+follow the same pattern.
 
 ---
 
 ## Key design decisions
 
-- **Tool-per-API**: each `tools/*.py` file owns exactly one external API, making it easy to swap or disable a source without touching other tools.
+- **Split raw clients from tool logic**: `apis/*.py` owns HTTP calls; `tools/*.py` owns formatting, orchestration, and ADK-facing function signatures.
+- **Configurable model backend**: `BACKEND=gemini` uses `GEMINI_MODEL`; `BACKEND=ollama` wraps the local model through `LiteLlm`.
+- **ESPN-first sports with fallback**: the sports tool uses ESPN when available and falls back to TheSportsDB for current CFL events.
+- **Runnable smoke tests live beside the app**: `daily_briefing/smoke_tests/` contains live tool tests plus a local agent runner.
 - **Plain Python callables**: ADK picks up tools automatically — no decorators or schemas needed.
 - **Single-shot execution**: `InMemoryRunner` runs the agent once and exits; no persistent session state.
 - **System prompt in `instruction.md`**: editable without changing Python code.
-- **Off-season detection**: sports tool suppresses score sections when a team is out of season and shows the next scheduled game date.
+- **Off-season detection**: sports output suppresses inactive leagues and shows the next scheduled game date when a team is out of season.
 
 ---
 

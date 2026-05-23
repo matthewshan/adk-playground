@@ -1,10 +1,10 @@
-"""Discord tool — incoming webhook delivery."""
+"""Discord tool — delivers the briefing via incoming webhook."""
 
 from __future__ import annotations
 
 import os
 
-import requests
+from daily_briefing.apis.discord import post_message
 
 
 def send_discord(message: str) -> str:
@@ -19,8 +19,5 @@ def send_discord(message: str) -> str:
         "Sent" on success. Raises requests.HTTPError on failure.
     """
     webhook_url = os.environ["DISCORD_WEBHOOK_URL"]
-    # Discord's per-message limit is 2000 characters.
-    payload = {"content": message[:2000]}
-    resp = requests.post(webhook_url, json=payload, timeout=10)
-    resp.raise_for_status()
+    post_message(webhook_url, message[:2000])  # Discord limit: 2000 chars
     return "Sent"

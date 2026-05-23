@@ -17,13 +17,13 @@ import traceback
 from pathlib import Path
 
 # Resolve repo root regardless of where the script is invoked from.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 # Load .env from the daily_briefing folder (next to .env.example).
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from daily_briefing.tools import TrackedTeam, get_news, get_sports_scores, get_weather
 from daily_briefing.tools.calendar_events import get_calendar_events

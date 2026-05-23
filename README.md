@@ -93,7 +93,12 @@ The daily briefing agent supports two model backends:
 - `BACKEND=gemini` (default)
 - `BACKEND=ollama`
 
-Environment variables are loaded from `/home/runner/work/adk-playground/adk-playground/daily_briefing/.env`, not from the repo root.
+Environment variables are loaded from `daily_briefing/.env`, not from the repo root.
+
+Internally, `daily_briefing/apis/` owns raw HTTP clients, `daily_briefing/tools/` owns
+formatting and orchestration, and `daily_briefing/smoke_tests/` contains runnable smoke
+tests. Sports data uses ESPN first and falls back to TheSportsDB when ESPN does not have
+current CFL schedule data.
 
 ### Configure environment
 
@@ -121,16 +126,22 @@ python3 -m daily_briefing.main
 
 ### Run local smoke tests
 
-Tool smoke tests:
+Run all tool smoke tests:
 
 ```bash
-python3 daily_briefing/test_apis.py
+python3 daily_briefing/smoke_tests/test_apis.py
 ```
 
-Agent test runner that prints the digest locally instead of posting to Discord:
+Run the sports-focused smoke test plus its unit checks:
 
 ```bash
-python3 daily_briefing/test_agent.py
+python3 daily_briefing/smoke_tests/test_sports.py
+```
+
+Run the agent locally and print the digest instead of posting to Discord:
+
+```bash
+python3 daily_briefing/smoke_tests/test_agent.py
 ```
 
 ### Docker
