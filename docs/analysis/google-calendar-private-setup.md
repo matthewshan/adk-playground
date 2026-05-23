@@ -17,7 +17,10 @@ Terraform                         Google Cloud
 Google Calendar (manual step)
   └─ Share calendar with service account email (Viewer)
 
-daily_briefing/tools.py
+daily_briefing/tools/calendar_events.py
+  └─ Formats today's events for the agent
+
+daily_briefing/apis/google_calendar.py
   └─ Loads key from GOOGLE_SERVICE_ACCOUNT_JSON_BASE64
   └─ Authenticates via google-auth library
   └─ Calls Calendar API v3 → list today's events
@@ -127,9 +130,8 @@ Then run the calendar tool in isolation:
 
 ```bash
 python - <<'EOF'
-import os
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv("daily_briefing/.env")
 from daily_briefing.tools import get_calendar_events
 print(get_calendar_events())
 EOF

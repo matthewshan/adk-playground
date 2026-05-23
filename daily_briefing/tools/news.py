@@ -1,10 +1,10 @@
-"""News tool — GNews top headlines."""
+"""News tool — formats GNews headlines for the daily briefing."""
 
 from __future__ import annotations
 
 import os
 
-import requests
+from daily_briefing.apis.gnews import fetch_top_headlines
 
 
 def get_news() -> str:
@@ -17,31 +17,17 @@ def get_news() -> str:
         A bulleted string listing headline and source.
     """
     gnews_key = os.environ["GNEWS_API_KEY"]
+    articles = fetch_top_headlines(gnews_key)
 
     seen: set[str] = set()
     lines: list[str] = []
 
-    def _add_line(title: str, source: str) -> None:
-        title = title.strip()
-        if not title:
-            return
-        key = title.lower()
-        if key in seen:
-            return
-        seen.add(key)
+    for article in articles:
+        title = article.get("title", "").strip()
+        if not title or title.lower() in seen:
+            continue
+        seen.add(title.lower())
+        source = (article.get("source") or {}).get("name", "GNews")
         lines.append(f"• {title} — {source}")
-
-    # General top headlines — GNews
-    gnews_resp = requests.get(
-        "https://gnews.io/api/v4/top-headlines",
-        params={"token": gnews_key, "lang": "en", "max": 10},
-        timeout=10,
-    )
-    gnews_resp.raise_for_status()
-    for article in gnews_resp.json().get("articles", []):
-        _add_line(
-            article.get("title", ""),
-            (article.get("source") or {}).get("name", "GNews"),
-        )
 
     return "\n".join(lines) if lines else "No news available."

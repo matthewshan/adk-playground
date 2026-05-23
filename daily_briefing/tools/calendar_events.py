@@ -1,4 +1,4 @@
-"""Calendar tool — Google Calendar v3 via service account."""
+"""Calendar tool — formats Google Calendar data for the daily briefing."""
 
 from __future__ import annotations
 
@@ -7,10 +7,7 @@ import datetime
 import json
 import os
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-
-_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+from daily_briefing.apis.google_calendar import fetch_events
 
 
 def get_calendar_events() -> str:
@@ -30,29 +27,17 @@ def get_calendar_events() -> str:
         return "Calendar unavailable: GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 not set."
 
     sa_info = json.loads(base64.b64decode(sa_b64).decode("utf-8"))
-    creds = service_account.Credentials.from_service_account_info(
-        sa_info, scopes=_CALENDAR_SCOPES
-    )
-    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-
     now = datetime.datetime.now(datetime.timezone.utc)
     today = now.date()
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_window = start_of_day + datetime.timedelta(days=7)
 
-    result = (
-        service.events()
-        .list(
-            calendarId=calendar_id,
-            timeMin=start_of_day.isoformat(),
-            timeMax=end_of_window.isoformat(),
-            singleEvents=True,
-            orderBy="startTime",
-        )
-        .execute()
+    items = fetch_events(
+        sa_info,
+        calendar_id,
+        start_of_day.isoformat(),
+        end_of_window.isoformat(),
     )
-
-    items: list[dict] = result.get("items", [])
     if not items:
         return "Nothing scheduled"
 

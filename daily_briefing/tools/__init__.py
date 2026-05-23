@@ -1,11 +1,12 @@
 """Tool functions for the daily briefing agent.
 
-Each sub-module owns one external API:
-  weather          — Open-Meteo (no key required)
-  news             — GNews (key required)
-  sports           — ESPN public API (no key required)
-  calendar_events  — Google Calendar v3 via service account
-  discord_webhook  — Discord incoming webhook
+Each tool handles one domain. Raw API calls live in daily_briefing/apis/:
+  apis/open_meteo.py      — Open-Meteo (no key required)
+  apis/gnews.py           — GNews (key required)
+  apis/espn.py            — ESPN public API (no key required)
+  apis/thesportsdb.py     — TheSportsDB (no key required)
+  apis/google_calendar.py — Google Calendar v3 via service account
+  apis/discord.py         — Discord incoming webhook
 """
 
 from daily_briefing.tools.calendar_events import get_calendar_events

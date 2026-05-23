@@ -6,11 +6,11 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 from google.adk import Agent  # noqa: E402
 from google.adk.models.lite_llm import LiteLlm  # noqa: E402
@@ -41,7 +41,7 @@ if _backend == "ollama":
 else:
     _model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
-_instruction = (Path(__file__).parent / "instruction.md").read_text(encoding="utf-8")
+_instruction = (Path(__file__).parent.parent / "instruction.md").read_text(encoding="utf-8")
 
 test_agent = Agent(
     name="daily_briefing",
