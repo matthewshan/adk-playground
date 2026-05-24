@@ -3,6 +3,10 @@
 This is a Python / Google ADK playground for experimenting with AI agents.
 Follow these instructions when making changes to this repository.
 
+> **Dual-assistant repo:** This file is read by GitHub Copilot.
+> The equivalent file for Claude Code is [`CLAUDE.md`](../CLAUDE.md) at the
+> repo root. Keep the two files in sync when updating project guidance.
+
 ---
 
 ## Documentation maintenance
@@ -41,19 +45,28 @@ docs/
 adk-playground/
   minimal_ollama_adk/     # Minimal ADK example using a local Ollama model
   daily_briefing/         # Morning digest agent (primary project)
-    agent.py              # ADK Agent wiring
-    instruction.md        # System prompt
+    agent.py              # ADK Agent wiring — model selection + tool registration
+    instruction.md        # System prompt (the ONLY place the prompt lives)
     main.py               # Single-shot runner (InMemoryRunner)
-    .env.example          # Required environment variables
-    tools/
-      __init__.py
+    .env.example          # Required environment variables — copy to .env
+    apis/                 # Raw HTTP clients (one file per external service)
+      discord.py
+      espn.py
+      gnews.py
+      google_calendar.py
+      open_meteo.py
+      thesportsdb.py
+    tools/                # ADK-registered tool functions (one file per API)
       weather.py          # Open-Meteo
       news.py             # GNews
-      sports.py           # ESPN public API
+      sports.py           # ESPN + TheSportsDB
       calendar_events.py  # Google Calendar v3
       discord_webhook.py  # Discord webhook delivery
+    smoke_tests/          # Runnable integration / unit tests
+      test_agent.py
+      test_apis.py
+      test_sports.py
   docs/                   # See index above
-  test_free_apis.py       # Smoke tests for no-key APIs (weather, sports)
   requirements.txt
 ```
 
