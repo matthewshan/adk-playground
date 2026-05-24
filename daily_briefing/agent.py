@@ -6,6 +6,7 @@ from google.adk.models.lite_llm import LiteLlm
 
 from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.discord_webhook import send_discord
+from daily_briefing.tools.memory import recall, remember
 from daily_briefing.tools.news import get_news
 from daily_briefing.tools.sports import get_sports_scores
 from daily_briefing.tools.weather import get_weather
@@ -24,5 +25,5 @@ root_agent = Agent(
     model=_model,
     description="Daily morning digest agent.",
     instruction=_instruction,
-    tools=[get_weather, get_news, get_sports_scores, get_calendar_events, send_discord],
+    tools=[get_weather, get_news, get_sports_scores, get_calendar_events, send_discord, remember, recall],
 )
