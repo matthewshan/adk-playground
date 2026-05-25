@@ -198,6 +198,7 @@ docs/
     adk-tool-design-lessons.md         # Lessons learned from ADK tool and memory design
   analysis/
     api-setup-guide.md                 # How to obtain each API key (GNews, Gemini, Discord, Calendar)
+    discord-bot-setup.md               # Discord bot setup: Developer Portal, env vars, session design
     google-calendar-private-setup.md   # External Terraform workflow for Google Calendar service account
   integrations/
     supabase-vector-adk.md             # Supabase pgvector schema setup for ADK memory
