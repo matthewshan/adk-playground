@@ -9,7 +9,6 @@ from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools.load_memory_tool import LoadMemoryTool
 
 from daily_briefing.tools.calendar_events import get_calendar_events
-from daily_briefing.tools.discord_webhook import send_discord
 from daily_briefing.tools.news import get_news
 from daily_briefing.tools.sports import get_sports_scores
 from daily_briefing.tools.weather import get_weather
@@ -37,22 +36,24 @@ async def _save_to_memory(callback_context: CallbackContext) -> None:
 
     Registered as ``after_agent_callback`` so the ADK framework calls this
     automatically at the end of every agent invocation.  If no memory service
-    is configured on the Runner, the error is silently swallowed so local /
-    test runs without Supabase still work.
+    is configured on the Runner, or if Supabase credentials are absent, the
+    error is silently swallowed so local / test runs still work.
     """
     try:
         await callback_context.add_session_to_memory()
-    except ValueError:
-        # memory_service not configured on this Runner — skip silently.
+    except Exception:
+        # memory_service not configured, Supabase env vars missing, or
+        # transient network error — skip silently.
         pass
 
 
-def make_agent(output_tool=send_discord, name: str = "daily_briefing") -> Agent:
-    """Create a daily-briefing Agent, swapping in a different output tool if needed.
+def make_agent(name: str = "daily_briefing") -> Agent:
+    """Create a daily-briefing Agent.
+
+    The agent composes text and returns it — delivery to Discord is handled
+    by the caller (discord_bot.py posts via channel.send()).
 
     Args:
-        output_tool: Callable registered as the last tool; defaults to send_discord.
-                     Pass a stub (e.g. print_briefing) for local smoke tests.
         name: ADK agent name; override to isolate test sessions from production.
     """
     return Agent(
@@ -65,7 +66,6 @@ def make_agent(output_tool=send_discord, name: str = "daily_briefing") -> Agent:
             get_news,
             get_sports_scores,
             get_calendar_events,
-            output_tool,
             LoadMemoryTool(),  # LLM can search past briefings on demand
         ],
         after_agent_callback=_save_to_memory,

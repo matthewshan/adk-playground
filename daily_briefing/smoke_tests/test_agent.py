@@ -1,5 +1,11 @@
-"""Local test runner — identical to main.py but prints the digest to stdout
-instead of posting to Discord. Safe to run behind a firewall."""
+"""Local test runner — prints the digest to stdout instead of posting to Discord.
+Safe to run behind a firewall.
+
+Differences from main.py / the production bot:
+  - Uses a separate app_name ("daily_briefing_test") to isolate Supabase memory
+    from the production scope.
+  - Prints all agent text output directly to stdout; no delivery tool needed.
+"""
 
 import asyncio
 import sys
@@ -27,16 +33,8 @@ from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService 
 APP_NAME = "daily_briefing_test"
 USER_ID = "local"
 
-
-def print_briefing(message: str) -> str:
-    """Console stand-in for send_discord: prints the briefing to stdout."""
-    print("\n" + "=" * 60)
-    print(message)
-    print("=" * 60 + "\n")
-    return "Printed"
-
-
-test_agent = make_agent(output_tool=print_briefing, name="daily_briefing_test")
+# Separate agent name keeps test sessions out of the production memory scope.
+test_agent = make_agent(name=APP_NAME)
 
 
 async def run() -> None:
@@ -66,7 +64,7 @@ async def run() -> None:
                         "Fetch weather for Grand Rapids MI, top news plus the latest cloud "
                         "and AI news, NFL/MLB/CFL scores (highlight Detroit Lions, Toronto "
                         "Blue Jays, Hamilton Tiger-Cats), and today's calendar events. "
-                        "Write and send the morning digest."
+                        "Write the morning digest."
                     )
                 )
             ],

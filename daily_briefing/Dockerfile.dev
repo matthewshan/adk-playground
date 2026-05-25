@@ -1,0 +1,20 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN useradd -m -u 1000 agent
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY daily_briefing/ daily_briefing/
+
+# Expose the ADK web UI port so it is reachable from the host.
+EXPOSE 8000
+
+USER agent
+
+# Starts the ADK dev UI on all interfaces so Docker port-mapping works.
+# WORKDIR /app contains daily_briefing/ — ADK discovers it automatically.
+# Access at http://localhost:8000 after: docker run -p 8000:8000 ...
+CMD ["adk", "web", "--host", "0.0.0.0", "--port", "8000"]
