@@ -54,6 +54,18 @@ python3 daily_briefing/smoke_tests/test_agent.py
 python3 daily_briefing/smoke_tests/test_discord_bot.py
 ```
 
+### ADK web UI (dev/testing)
+```bash
+# Option A — run directly without Docker (fastest)
+adk web --host 0.0.0.0 --port 8000 daily_briefing
+# Then open http://localhost:8000
+
+# Option B — run in Docker
+docker build -t daily-briefing-dev -f daily_briefing/Dockerfile.dev .
+docker run --env-file daily_briefing/.env -p 8000:8000 daily-briefing-dev
+# Then open http://localhost:8000
+```
+
 ### Docker
 ```bash
 # CronJob image
@@ -63,6 +75,10 @@ docker run --env-file daily_briefing/.env daily-briefing
 # Discord bot image (long-running)
 docker build -t daily-briefing-bot -f daily_briefing/Dockerfile.bot .
 docker run --env-file daily_briefing/.env daily-briefing-bot
+
+# Dev / web UI image
+docker build -t daily-briefing-dev -f daily_briefing/Dockerfile.dev .
+docker run --env-file daily_briefing/.env -p 8000:8000 daily-briefing-dev
 ```
 
 ### Minimal Ollama smoke test
@@ -92,6 +108,7 @@ adk-playground/
     discord_bot.py        # Long-running Discord bot for bidirectional conversation
     Dockerfile            # Container image for the scheduled CronJob
     Dockerfile.bot        # Container image for the Discord bot (long-running)
+    Dockerfile.dev        # Dev image — runs ADK web UI on port 8000
     .env.example          # Required environment variables — copy to .env
     apis/                 # Raw HTTP clients (one file per external service)
       discord.py

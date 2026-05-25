@@ -18,7 +18,8 @@ daily_briefing/
   __init__.py           # package marker
   Dockerfile            # container image for the scheduled CronJob
   Dockerfile.bot        # container image for the long-running Discord bot
-  agent.py              # ADK Agent — wires model + tools (shared by both runners)
+  Dockerfile.dev        # dev image — runs ADK web UI on port 8000 (adk web)
+  agent.py              # ADK Agent — wires model + tools (shared by all runners)
   instruction.md        # system prompt (edit without touching code)
   main.py               # single-shot InMemoryRunner — used by the CronJob
   discord_bot.py        # long-running Discord bot for bidirectional conversation
