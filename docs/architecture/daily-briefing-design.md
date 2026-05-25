@@ -2,12 +2,14 @@
 
 ## Overview
 
-A single-shot morning digest agent built on **Google ADK** with a configurable
+A daily morning digest agent built on **Google ADK** with a configurable
 **Gemini** or **Ollama** backend. On each run it gathers weather, news, sports, and
 calendar data through tool wrappers over raw API clients, asks the model to write a
-friendly summary, and posts the result to Discord via webhook.
+friendly summary, and posts the result to the Discord channel.
 
-Intended deployment: a **Kubernetes CronJob** running daily at 7 AM.
+Intended deployment: a **long-running Kubernetes Deployment** running `discord_bot.py`,
+which fires the morning briefing at 7 AM ET via `discord.ext.tasks` and handles
+bidirectional conversation with users in the same process.
 
 ---
 
@@ -118,8 +120,10 @@ main.py (CLI only — not used in production)
 
 ## Sports tool behavior
 
-`get_sports_scores()` accepts a list of `TrackedTeam` objects from the caller. The smoke
-tests use the following set:
+`get_sports_scores()` always runs against the three default teams (Lions, Blue
+Jays, Tiger-Cats) defined in `_DEFAULT_TEAMS`. The function accepts an optional
+`teams` argument that smoke tests use to pass a custom list of `TrackedTeam`
+objects:
 
 ```python
 teams = [
@@ -128,6 +132,14 @@ teams = [
   TrackedTeam("CFL", "football", "cfl", "Hamilton Tiger-Cats"),
 ]
 ```
+
+The `teams` parameter has **no type annotation** intentionally — annotating it
+with `list[TrackedTeam] | None` generates a JSON Schema that the Gemini API
+rejects, silently breaking tool calls. See
+[adk-tool-design-lessons.md](adk-tool-design-lessons.md) §1–2.
+
+The function guards against the LLM passing invalid values (e.g. a list of
+strings) and falls back to `_DEFAULT_TEAMS` in that case.
 
 Per team the tool returns a **record** when available, **recent completed games**,
 **upcoming games** (next 3), and best-effort **standings**.
@@ -164,6 +176,7 @@ follow the same pattern.
 - **Plain Python callables**: ADK picks up tools automatically — no decorators or schemas needed.
 - **System prompt in `instruction.md`**: editable without changing Python code.
 - **Off-season detection**: sports output suppresses inactive leagues and shows the next scheduled game date when a team is out of season.
+- **Avoid complex type annotations on tool parameters**: ADK's JSON schema generator turns dataclass/union types into `$defs`/`$ref` schemas that the Gemini API rejects. Use bare `param=None` (no annotation) and guard against invalid LLM-supplied values at the top of the function. See [adk-tool-design-lessons.md](adk-tool-design-lessons.md).
 
 ---
 
@@ -173,3 +186,4 @@ follow the same pattern.
 - [API Setup Guide](../analysis/api-setup-guide.md) — how to obtain each API key
 - [Google Calendar Private Setup](../analysis/google-calendar-private-setup.md) — external Terraform workflow for service account
 - [K8s Deployment Plan](../plans/plan-adk-k8s-deployment.md) — Phase 2 container + CronJob
+- [ADK Tool Design Lessons](adk-tool-design-lessons.md) — pitfalls and patterns for writing ADK tool functions

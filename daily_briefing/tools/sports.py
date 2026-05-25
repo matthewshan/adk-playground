@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -41,20 +42,33 @@ class TrackedTeam:
     team_name: str
 
 
-def get_sports_scores(teams: list[TrackedTeam]) -> str:
+_DEFAULT_TEAMS: list[TrackedTeam] = [
+    TrackedTeam(league_label="NFL", sport="football", league="nfl", team_name="Detroit Lions"),
+    TrackedTeam(league_label="MLB", sport="baseball", league="mlb", team_name="Toronto Blue Jays"),
+    TrackedTeam(league_label="CFL", sport="football", league="cfl", team_name="Hamilton Tiger-Cats"),
+]
+
+
+def get_sports_scores(teams=None) -> str:
     """Fetch team record, recent results, next 3 upcoming games, and division
-    standings for each tracked team.
+    standings for the tracked teams (Detroit Lions, Toronto Blue Jays, Hamilton
+    Tiger-Cats).
 
     Tries ESPN first; falls back to TheSportsDB for leagues where ESPN has no
     current schedule data (e.g. CFL after 2023).
 
-    Args:
-        teams: List of TrackedTeam objects describing which teams to report on.
+    Call with no arguments to fetch all three default teams.
 
     Returns:
         Formatted per-team summary.
     """
-    today = datetime.datetime.now(datetime.timezone.utc).date()
+    # Fall back to defaults if called with no args OR if the LLM passed
+    # something invalid (e.g. a list of strings instead of TrackedTeam objects).
+    if not teams or not all(isinstance(t, (TrackedTeam, dict)) for t in teams):
+        teams = _DEFAULT_TEAMS
+    # Use Eastern Time so games played this evening aren't mislabelled
+    # "Yesterday" once UTC rolls past midnight (ET is UTC-4/5).
+    today = datetime.datetime.now(ZoneInfo("America/New_York")).date()
     yesterday = today - datetime.timedelta(days=1)
     sections: list[str] = []
 
