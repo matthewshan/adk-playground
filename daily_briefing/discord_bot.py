@@ -1,9 +1,14 @@
 """
 Long-running Discord bot for bidirectional conversation with the daily briefing agent.
 
-Each Discord user who messages in the configured channel gets their own independent
-conversation session with the ADK agent. Context is maintained in-memory for the
-lifetime of the bot process.
+This is the single process that owns ALL agent interactions:
+
+  • Scheduled briefing — fires daily at 7 AM Eastern via discord.ext.tasks.
+    Posts the morning digest directly to the configured channel.
+  • Conversational — each Discord user in the configured channel gets their own
+    independent ADK session.  Context is maintained in-memory for the lifetime
+    of the bot process.  Past sessions are persisted to Supabase for long-term
+    semantic recall via the agent's LoadMemoryTool.
 
 Entry point:
     python -m daily_briefing.discord_bot
@@ -12,8 +17,14 @@ Required environment variables:
     DISCORD_BOT_TOKEN      — Bot token from the Discord Developer Portal
     DISCORD_BOT_CHANNEL_ID — Channel ID the bot listens in (integer)
 
-    All other variables from .env.example are also required (Gemini key,
-    GNews key, etc.) since the same agent runs here as in the CronJob.
+Optional but recommended (memory persistence):
+    SUPABASE_URL               — Supabase project URL
+    SUPABASE_SERVICE_ROLE_KEY  — Service-role key for the Supabase project
+    (If absent, the bot starts without memory and logs a startup warning.)
+
+All other variables from .env.example are also required (Gemini key,
+GNews key, etc.) since the same agent runs for both scheduled and
+conversational paths.
 
 Setup (one-time, in Discord Developer Portal):
     1. Create an application at https://discord.com/developers/applications
@@ -26,23 +37,22 @@ Setup (one-time, in Discord Developer Portal):
 Session design:
     - Per-user: each Discord user_id maps to its own ADK session, so Alice and
       Bob have independent conversation histories even in the same channel.
+    - Scheduled briefing uses user_id "scheduler" — isolated from per-user memory.
     - Sessions live in RAM; they reset when the bot process restarts.
+      Long-term memory is persisted to Supabase via after_agent_callback.
     - A per-user asyncio.Lock serialises rapid back-to-back messages from the
       same user so the agent never processes two turns concurrently for one session.
-
-Future memory upgrade:
-    Swap InMemoryRunner for Runner(..., memory_service=YourVectorStore()) in main().
-    The user_id key (Discord snowflake) and the _sessions / _locks dicts are
-    unchanged — only the runner constructor differs.
 """
 
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 import os
 import sys
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # Load env before importing the agent so model selection and API keys are ready.
 # Same pattern as daily_briefing/main.py.
@@ -52,28 +62,56 @@ from dotenv import load_dotenv  # noqa: E402
 load_dotenv(Path(__file__).parent / ".env")
 
 import discord  # noqa: E402
-from google.adk.runners import InMemoryRunner  # noqa: E402
+from discord.ext import tasks  # noqa: E402
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService  # noqa: E402
+from google.adk.runners import Runner  # noqa: E402
+from google.adk.sessions.in_memory_session_service import InMemorySessionService  # noqa: E402
 from google.genai import types  # noqa: E402
 
-from daily_briefing.agent import root_agent  # noqa: E402
+from daily_briefing.agent import now_et, root_agent  # noqa: E402
+from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 APP_NAME = "daily_briefing_bot"
 
+# user_id used for the daily scheduled briefing — isolated from per-user scopes.
+_SCHEDULER_USER_ID = "scheduler"
+
+# Time the scheduled briefing fires each day (Eastern Time).
+_BRIEFING_TIME = datetime.time(hour=7, minute=0, tzinfo=ZoneInfo("America/New_York"))
+
 # Populated in main() before bot.run() so the event loop owns them.
-_runner: InMemoryRunner | None = None
+_runner: Runner | None = None
 _channel_id: int | None = None
 
-# user_id (Discord snowflake int) → ADK session_id (str)
-_sessions: dict[int, str] = {}
+# user_id (str) → ADK session_id (str)
+_sessions: dict[str, str] = {}
 
 # Per-user lock so rapid messages are queued, not parallelised.
-_locks: dict[int, asyncio.Lock] = {}
+_locks: dict[str, asyncio.Lock] = {}
 
 intents = discord.Intents.default()
 intents.message_content = True  # requires "Message Content Intent" in Developer Portal
 bot = discord.Client(intents=intents)
+
+
+# ---------------------------------------------------------------------------
+# Startup check
+# ---------------------------------------------------------------------------
+
+
+def _check_supabase_config() -> None:
+    """Log a warning if Supabase env vars are absent; bot runs without memory."""
+    missing = [
+        v for v in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY") if not os.getenv(v)
+    ]
+    if missing:
+        logger.warning(
+            "Memory disabled: env var(s) not set: %s. "
+            "Add them to .env to enable Supabase memory persistence.",
+            ", ".join(missing),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -111,23 +149,22 @@ def _split_message(text: str, limit: int = 2000) -> list[str]:
     return chunks
 
 
-async def _get_or_create_session(user_id: int) -> str:
+async def _get_or_create_session(user_id: str) -> str:
     """Return the existing ADK session ID for *user_id*, creating one if needed."""
     if user_id not in _sessions:
         assert _runner is not None, "runner not initialised"
         session = await _runner.session_service.create_session(
             app_name=APP_NAME,
-            user_id=str(user_id),
+            user_id=user_id,
         )
         _sessions[user_id] = session.id
-        logger.info("Created new session %s for user %d", session.id, user_id)
+        logger.info("Created new session %s for user %s", session.id, user_id)
     return _sessions[user_id]
 
 
-async def _run_agent(user_id: int, prompt: str) -> str:
+async def _run_agent(user_id: str, prompt: str) -> str:
     """Send *prompt* through the ADK agent for *user_id*'s session.
 
-    Mirrors the run_prompt() pattern from minimal_ollama_adk/main.py.
     Collects all text parts from every event and returns them joined.
     """
     assert _runner is not None, "runner not initialised"
@@ -140,7 +177,7 @@ async def _run_agent(user_id: int, prompt: str) -> str:
 
     response_parts: list[str] = []
     async for event in _runner.run_async(
-        user_id=str(user_id),
+        user_id=user_id,
         session_id=session_id,
         new_message=message,
     ):
@@ -154,6 +191,46 @@ async def _run_agent(user_id: int, prompt: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Scheduled briefing task
+# ---------------------------------------------------------------------------
+
+
+@tasks.loop(time=_BRIEFING_TIME)
+async def daily_briefing_task() -> None:
+    """Fire the morning digest once a day at 7 AM ET and post it to the channel."""
+    channel = bot.get_channel(_channel_id)  # type: ignore[arg-type]
+    if channel is None:
+        logger.error("Scheduled briefing: channel %d not found", _channel_id)
+        return
+
+    prompt = (
+        f"Current date and time: {now_et()}\n\n"
+        "Fetch weather for Grand Rapids MI, top news plus the latest cloud "
+        "and AI news, NFL/MLB/CFL scores (highlight Detroit Lions, Toronto "
+        "Blue Jays, Hamilton Tiger-Cats), and today's calendar events. "
+        "Write the morning digest."
+    )
+
+    logger.info("Firing scheduled morning briefing")
+    async with channel.typing():  # type: ignore[union-attr]
+        try:
+            response = await _run_agent(_SCHEDULER_USER_ID, prompt)
+        except Exception:
+            logger.exception("Scheduled briefing agent error")
+            await channel.send("⚠️ Scheduled briefing failed. Check the logs.")  # type: ignore[union-attr]
+            return
+
+    for chunk in _split_message(response):
+        await channel.send(chunk)  # type: ignore[union-attr]
+
+
+@daily_briefing_task.before_loop
+async def _before_daily_briefing() -> None:
+    """Wait for the bot to be fully connected before the first task iteration."""
+    await bot.wait_until_ready()
+
+
+# ---------------------------------------------------------------------------
 # Discord event handlers
 # ---------------------------------------------------------------------------
 
@@ -162,6 +239,9 @@ async def _run_agent(user_id: int, prompt: str) -> str:
 async def on_ready() -> None:
     logger.info("Logged in as %s (ID: %d)", bot.user, bot.user.id)  # type: ignore[union-attr]
     logger.info("Listening in channel ID %d", _channel_id)
+    logger.info("Scheduled briefing at %s daily", _BRIEFING_TIME.strftime("%H:%M %Z"))
+    if not daily_briefing_task.is_running():
+        daily_briefing_task.start()
 
 
 @bot.event
@@ -179,7 +259,8 @@ async def on_message(message: discord.Message) -> None:
     if not prompt:
         return
 
-    user_id = message.author.id
+    # Use a string key so it's compatible with the scheduler's str user_id.
+    user_id = str(message.author.id)
 
     # Serialise concurrent messages from the same user.
     lock = _locks.setdefault(user_id, asyncio.Lock())
@@ -189,7 +270,7 @@ async def on_message(message: discord.Message) -> None:
             try:
                 response = await _run_agent(user_id, prompt)
             except Exception:
-                logger.exception("Agent error for user %d", user_id)
+                logger.exception("Agent error for user %s", user_id)
                 await message.channel.send(
                     "⚠️ Something went wrong. Please try again."
                 )
@@ -224,9 +305,18 @@ def main() -> None:
         sys.exit(1)
     _channel_id = int(raw_channel)
 
+    # Warn early if Supabase is not configured — bot will still start.
+    _check_supabase_config()
+
     # Initialise the runner synchronously before handing control to discord.py's
-    # event loop. InMemoryRunner.__init__ is synchronous in ADK.
-    _runner = InMemoryRunner(agent=root_agent, app_name=APP_NAME)
+    # event loop. Runner.__init__ is synchronous in ADK.
+    _runner = Runner(
+        agent=root_agent,
+        app_name=APP_NAME,
+        session_service=InMemorySessionService(),
+        artifact_service=InMemoryArtifactService(),
+        memory_service=SupabaseMemoryService(),
+    )
 
     logger.info("Starting Discord bot (channel %d)…", _channel_id)
     # bot.run() creates and owns the asyncio event loop; no asyncio.run() wrapper needed.

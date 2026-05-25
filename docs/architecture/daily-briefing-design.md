@@ -16,33 +16,38 @@ Intended deployment: a **Kubernetes CronJob** running daily at 7 AM.
 ```
 daily_briefing/
   __init__.py           # package marker
-  Dockerfile            # container image for the scheduled CronJob
+  Dockerfile            # container image for the scheduled CronJob (legacy — bot now handles scheduling)
   Dockerfile.bot        # container image for the long-running Discord bot
   Dockerfile.dev        # dev image — runs ADK web UI on port 8000 (adk web)
-  agent.py              # ADK Agent — wires model + tools (shared by all runners)
+  agent.py              # ADK Agent — wires model + tools; make_agent(), now_et(), _save_to_memory
   instruction.md        # system prompt (edit without touching code)
-  main.py               # single-shot InMemoryRunner — used by the CronJob
-  discord_bot.py        # long-running Discord bot for bidirectional conversation
+  main.py               # CLI debug runner — prints digest to stdout (not used in production)
+  discord_bot.py        # long-running Discord bot: scheduled briefing + conversational messages
   apis/
     __init__.py         # package marker for raw API clients
-    discord.py          # Discord webhook POST
+    discord.py          # Discord webhook POST (unused by agent; kept for manual use)
     espn.py             # ESPN team, schedule, scoreboard, standings calls
     gnews.py            # GNews headlines
     google_calendar.py  # Google Calendar v3 client
     open_meteo.py       # Open-Meteo forecast client
+    supabase.py         # Supabase pgvector insert + similarity search
     thesportsdb.py      # TheSportsDB fallback for CFL events
+  memory/
+    __init__.py         # package marker
+    supabase_memory_service.py  # ADK BaseMemoryService backed by Supabase pgvector
   tools/
     __init__.py         # re-exports tool functions for the agent
     calendar_events.py  # calendar formatting/orchestration
-    discord_webhook.py  # delivery + Discord size guardrails
+    discord_webhook.py  # delivery + Discord size guardrails (unused by agent; kept for manual use)
     news.py             # headline formatting/orchestration
     sports.py           # team-centric sports summary orchestration
     weather.py          # forecast formatting/orchestration
   smoke_tests/
     __init__.py         # package marker
-    test_agent.py       # local runner that prints the digest instead of posting
+    test_agent.py       # local runner that prints the digest to stdout
     test_apis.py        # live smoke test for all tools
     test_discord_bot.py # unit tests for discord_bot helpers (no token required)
+    test_memory.py      # Supabase pgvector smoke test (embed → insert → similarity search)
     test_sports.py      # sports unit tests + live smoke test
 ```
 
@@ -50,35 +55,50 @@ daily_briefing/
 
 ## Data flow
 
-### Scheduled CronJob (`main.py`)
+The Discord bot is the single process that owns all agent interactions.
+There is no separate CronJob; scheduling is handled internally by `discord.ext.tasks`.
+
+### Scheduled briefing (daily at 7 AM ET)
 
 ```
-main.py / smoke_tests/test_agent.py
-  └─ agent.py (ADK Agent)
-       ├─ tools/weather.py          → apis/open_meteo.py      → Open-Meteo API
-       ├─ tools/news.py             → apis/gnews.py           → GNews API
-       ├─ tools/sports.py           → apis/espn.py            → ESPN public API
-       │                              apis/thesportsdb.py     → TheSportsDB API (CFL fallback)
-       ├─ tools/calendar_events.py  → apis/google_calendar.py → Google Calendar API v3
-       └─ tools/discord_webhook.py  → apis/discord.py         → Discord webhook POST
+discord_bot.py — @tasks.loop(time=07:00 ET)
+  └─ _run_agent("scheduler", briefing_prompt)
+       └─ Runner (Runner + SupabaseMemoryService)
+            └─ agent.py (ADK Agent)
+                 ├─ tools/weather.py          → apis/open_meteo.py      → Open-Meteo API
+                 ├─ tools/news.py             → apis/gnews.py           → GNews API
+                 ├─ tools/sports.py           → apis/espn.py            → ESPN public API
+                 │                              apis/thesportsdb.py     → TheSportsDB API (CFL fallback)
+                 ├─ tools/calendar_events.py  → apis/google_calendar.py → Google Calendar API v3
+                 └─ LoadMemoryTool()          → SupabaseMemoryService.search_memory()
+            └─ after_agent_callback (_save_to_memory)
+                 └─ SupabaseMemoryService.add_session_to_memory()
+                      └─ apis/supabase.py → Supabase pgvector (agent_memory table)
+  └─ channel.send() [chunked, ≤2000 chars per send]
 ```
 
-### Discord bot (`discord_bot.py`)
+### Conversational messages
 
 ```
-discord_bot.py (long-running Deployment — replicas: 1)
-  └─ discord.py Gateway WebSocket
-       └─ on_message (all messages in DISCORD_BOT_CHANNEL_ID)
-            ├─ per-user asyncio.Lock  (serialises rapid messages from same user)
-            ├─ _get_or_create_session(user_id) → InMemoryRunner.session_service
-            └─ _run_agent(user_id, prompt)     → InMemoryRunner.run_async()
-                                                    └─ agent.py (same tools as CronJob)
-                  → message.channel.send() [chunked, ≤2000 chars per send]
+discord_bot.py — on_message (all messages in DISCORD_BOT_CHANNEL_ID)
+  ├─ per-user asyncio.Lock  (serialises rapid messages from same user)
+  ├─ _get_or_create_session(user_id) → Runner.session_service (InMemorySessionService)
+  └─ _run_agent(user_id, prompt)     → Runner.run_async()
+       └─ agent.py (same tools as scheduled briefing; LoadMemoryTool recalls past sessions)
+  └─ message.channel.send() [chunked, ≤2000 chars per send]
 ```
 
-Both runners import the same `agent.py` — tools and model config are shared.
-The two processes are independent: the CronJob terminates after each run; the bot
-stays alive until stopped.
+Both paths use the same `Runner` instance initialised in `main()` — same agent, same
+memory service, same model config.  Memory is scoped per user_id so per-user sessions
+are isolated from each other and from the `"scheduler"` scope.
+
+### Local debug runner (`main.py`)
+
+```
+main.py (CLI only — not used in production)
+  └─ Runner + SupabaseMemoryService
+       └─ agent.py → same tools → prints digest to stdout
+```
 
 ---
 
@@ -133,13 +153,15 @@ follow the same pattern.
 
 ## Key design decisions
 
+- **Bot is the single process for all agent interactions**: `discord_bot.py` handles both the scheduled morning briefing (via `discord.ext.tasks`) and conversational messages. No separate CronJob process is needed — one Deployment, one Dockerfile, one Runner.
+- **Agent never calls send_discord**: delivery is always handled by the bot via `channel.send()`. The agent composes text and returns it; the bot chunks and posts it. `tools/discord_webhook.py` and `apis/discord.py` are retained for manual use but are not registered as agent tools.
+- **Supabase long-term memory via pgvector**: `SupabaseMemoryService` (implementing ADK's `BaseMemoryService`) embeds agent output turns and stores them in Supabase. The agent exposes `LoadMemoryTool()` for on-demand semantic recall. If Supabase env vars are absent, the bot logs a startup warning and continues without memory.
+- **Per-user memory isolation**: each Discord user_id maps to a distinct `app_name/user_id` scope in Supabase. The scheduled briefing uses `user_id="scheduler"` — isolated from per-user scopes.
 - **Split raw clients from tool logic**: `apis/*.py` owns HTTP calls; `tools/*.py` owns formatting, orchestration, and ADK-facing function signatures.
 - **Configurable model backend**: `BACKEND=gemini` uses `GEMINI_MODEL`; `BACKEND=ollama` wraps the local model through `LiteLlm`.
 - **ESPN-first sports with fallback**: the sports tool uses ESPN when available and falls back to TheSportsDB for current CFL events.
-- **Runnable smoke tests live beside the app**: `daily_briefing/smoke_tests/` contains live tool tests plus a local agent runner.
+- **Runnable smoke tests live beside the app**: `daily_briefing/smoke_tests/` contains live tool tests, a local agent runner, and a Supabase memory smoke test.
 - **Plain Python callables**: ADK picks up tools automatically — no decorators or schemas needed.
-- **Single-shot execution**: `InMemoryRunner` runs the agent once and exits; no persistent session state (CronJob path).
-- **Long-running bot with per-user sessions**: `discord_bot.py` keeps sessions alive in RAM, one per Discord user ID. A per-user `asyncio.Lock` serialises rapid back-to-back messages. Swapping `InMemoryRunner` for a `Runner` with a vector-DB memory service is a one-line change in `discord_bot.main()`.
 - **System prompt in `instruction.md`**: editable without changing Python code.
 - **Off-season detection**: sports output suppresses inactive leagues and shows the next scheduled game date when a team is out of season.
 

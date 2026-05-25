@@ -1,24 +1,30 @@
 """
 Unit tests for daily_briefing/discord_bot.py — no Discord token required.
 
-Tests the _split_message helper in isolation, covering:
-  - Short messages that fit in a single chunk
-  - Long messages that must be split into multiple chunks
-  - Preference for newline boundaries over hard character splits
-  - Edge cases (empty string, exact-limit length)
+Tests pure helper functions and constants, covering:
+  - _split_message: short/long messages, newline-preference, edge cases
+  - _SCHEDULER_USER_ID: stable string key for the scheduled briefing scope
+  - _check_supabase_config: logs a warning when Supabase env vars are absent
 
 Run:
     python daily_briefing/smoke_tests/test_discord_bot.py
 """
 
+import logging
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 # Allow running from the repo root or the smoke_tests/ directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from daily_briefing.discord_bot import _split_message
+from daily_briefing.discord_bot import (
+    _SCHEDULER_USER_ID,
+    _check_supabase_config,
+    _split_message,
+)
 
 
 class SplitMessageTests(unittest.TestCase):
@@ -102,6 +108,46 @@ class SplitMessageTests(unittest.TestCase):
         for chunk in chunks:
             self.assertLessEqual(len(chunk), 10)
         self.assertEqual("".join(chunks), text)
+
+
+class SchedulerTests(unittest.TestCase):
+    """Tests for scheduled-briefing constants and startup checks."""
+
+    def test_scheduler_user_id_is_string(self) -> None:
+        """_SCHEDULER_USER_ID must be a str so it's compatible with ADK session keys."""
+        self.assertIsInstance(_SCHEDULER_USER_ID, str)
+
+    def test_scheduler_user_id_is_not_empty(self) -> None:
+        self.assertTrue(_SCHEDULER_USER_ID)
+
+    def test_check_supabase_config_warns_when_url_missing(self) -> None:
+        env_without_supabase = {
+            k: v for k, v in os.environ.items()
+            if k not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+        }
+        with patch.dict(os.environ, env_without_supabase, clear=True):
+            with self.assertLogs("daily_briefing.discord_bot", level=logging.WARNING) as cm:
+                _check_supabase_config()
+        self.assertTrue(any("Memory disabled" in line for line in cm.output))
+
+    def test_check_supabase_config_silent_when_configured(self) -> None:
+        env_with_supabase = dict(os.environ)
+        env_with_supabase["SUPABASE_URL"] = "https://example.supabase.co"
+        env_with_supabase["SUPABASE_SERVICE_ROLE_KEY"] = "fake-key"
+        with patch.dict(os.environ, env_with_supabase, clear=True):
+            # Should not raise and should not emit any warnings.
+            try:
+                with self.assertLogs("daily_briefing.discord_bot", level=logging.WARNING):
+                    _check_supabase_config()
+                self.fail("Expected no log output but got some")
+            except AssertionError as exc:
+                # assertLogs raises AssertionError when no logs are emitted — that's
+                # the success case here.
+                if "no logs" in str(exc).lower() or "0 log" in str(exc).lower():
+                    pass  # expected: no warnings logged
+                # If the AssertionError message is from self.fail(), re-raise.
+                elif "Expected no log" in str(exc):
+                    raise
 
 
 if __name__ == "__main__":

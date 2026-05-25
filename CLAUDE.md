@@ -24,19 +24,20 @@ A Python / Google ADK playground for experimenting with AI agents.
 python3 -m pip install --user -r requirements.txt
 ```
 
-### Run the daily briefing agent
+### Run the Discord bot (primary — handles both scheduled briefing and conversation)
 ```bash
 # Copy and fill in the env file first
 cp daily_briefing/.env.example daily_briefing/.env
 
-python3 -m daily_briefing.main
+# Requires DISCORD_BOT_TOKEN and DISCORD_BOT_CHANNEL_ID in daily_briefing/.env.
+# Fires the morning digest automatically at 7 AM ET via discord.ext.tasks.
+# See daily_briefing/.env.example for full setup instructions.
+python3 -m daily_briefing.discord_bot
 ```
 
-### Run the Discord bot (bidirectional conversation)
+### Run the CLI debug runner (prints digest to stdout — no Discord required)
 ```bash
-# Requires DISCORD_BOT_TOKEN and DISCORD_BOT_CHANNEL_ID in daily_briefing/.env
-# See daily_briefing/.env.example for setup instructions
-python3 -m daily_briefing.discord_bot
+python3 -m daily_briefing.main
 ```
 
 ### Smoke tests (no agent, just tool calls)
@@ -47,11 +48,14 @@ python3 daily_briefing/smoke_tests/test_apis.py
 # Sports-focused checks + unit assertions
 python3 daily_briefing/smoke_tests/test_sports.py
 
-# Full agent run — prints digest instead of posting to Discord
+# Full agent run — prints digest to stdout
 python3 daily_briefing/smoke_tests/test_agent.py
 
 # Discord bot unit tests — no token required
 python3 daily_briefing/smoke_tests/test_discord_bot.py
+
+# Supabase memory smoke test — requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + GEMINI_API_KEY
+python3 daily_briefing/smoke_tests/test_memory.py
 ```
 
 ### ADK web UI (dev/testing)
@@ -68,11 +72,7 @@ docker run --env-file daily_briefing/.env -p 8000:8000 daily-briefing-dev
 
 ### Docker
 ```bash
-# CronJob image
-docker build -t daily-briefing -f daily_briefing/Dockerfile .
-docker run --env-file daily_briefing/.env daily-briefing
-
-# Discord bot image (long-running)
+# Discord bot image (primary long-running image — handles both scheduling and conversation)
 docker build -t daily-briefing-bot -f daily_briefing/Dockerfile.bot .
 docker run --env-file daily_briefing/.env daily-briefing-bot
 
@@ -102,24 +102,27 @@ python3 -m minimal_ollama_adk.main "Reply with exactly: adk is working"
 adk-playground/
   minimal_ollama_adk/     # Minimal ADK example using a local Ollama model
   daily_briefing/         # Morning digest agent (primary project)
-    agent.py              # ADK Agent wiring — model selection + tool registration
+    agent.py              # ADK Agent — make_agent(), now_et(), _save_to_memory, LoadMemoryTool
     instruction.md        # System prompt (the ONLY place the prompt lives)
-    main.py               # Single-shot runner (InMemoryRunner) — used by CronJob
-    discord_bot.py        # Long-running Discord bot for bidirectional conversation
-    Dockerfile            # Container image for the scheduled CronJob
-    Dockerfile.bot        # Container image for the Discord bot (long-running)
+    main.py               # CLI debug runner — prints digest to stdout (not used in production)
+    discord_bot.py        # Long-running bot — scheduled briefing (7 AM ET) + conversation
+    Dockerfile            # Legacy CronJob image (bot now handles scheduling)
+    Dockerfile.bot        # Container image for the Discord bot (primary)
     Dockerfile.dev        # Dev image — runs ADK web UI on port 8000
     .env.example          # Required environment variables — copy to .env
     apis/                 # Raw HTTP clients (one file per external service)
-      discord.py
+      discord.py          # Webhook client (not used by agent; kept for manual use)
       espn.py
       gnews.py
       google_calendar.py
       open_meteo.py
+      supabase.py         # pgvector insert + similarity search
       thesportsdb.py
+    memory/               # ADK memory service implementation
+      supabase_memory_service.py
     tools/                # ADK-registered tool functions (one file per API)
       calendar_events.py
-      discord_webhook.py
+      discord_webhook.py  # Not used by agent; kept for manual use
       news.py
       sports.py
       weather.py
@@ -127,6 +130,7 @@ adk-playground/
       test_agent.py
       test_apis.py
       test_discord_bot.py
+      test_memory.py      # Supabase pgvector smoke test
       test_sports.py
   docs/                   # Architecture, setup, prompt, and deployment notes
   requirements.txt        # Shared Python dependencies
@@ -143,15 +147,16 @@ All secrets live in `daily_briefing/.env` (never committed). Copy from
 |---|---|---|
 | `BACKEND` | no | `gemini` (default) or `ollama` |
 | `GEMINI_API_KEY` | if Gemini | Google AI Studio key |
-| `GEMINI_MODEL` | no | default `gemini-3.5-flash` |
+| `GEMINI_MODEL` | no | default `gemini-3.1-flash-lite` |
 | `OLLAMA_API_BASE` | if Ollama | e.g. `http://127.0.0.1:11434` |
 | `OLLAMA_MODEL` | if Ollama | e.g. `qwen2.5:7b` |
 | `GNEWS_API_KEY` | yes | GNews free tier |
-| `DISCORD_WEBHOOK_URL` | yes | Incoming webhook URL (CronJob outbound posts) |
-| `DISCORD_BOT_TOKEN` | if using bot | Discord bot token — Developer Portal → Bot → Token |
-| `DISCORD_BOT_CHANNEL_ID` | if using bot | Channel ID the bot listens in |
+| `DISCORD_BOT_TOKEN` | yes | Discord bot token — Developer Portal → Bot → Token |
+| `DISCORD_BOT_CHANNEL_ID` | yes | Channel ID the bot listens in |
 | `GOOGLE_CALENDAR_ID` | yes | Calendar email address |
 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | yes | Base64-encoded service account JSON |
+| `SUPABASE_URL` | optional | Supabase project URL — enables long-term memory |
+| `SUPABASE_SERVICE_ROLE_KEY` | optional | Service-role key — bot warns and degrades if absent |
 
 ---
 
@@ -189,10 +194,13 @@ docs/
   context-engineering.md               # Prompt-writing rules for small/local models
   architecture/
     daily-briefing-design.md           # Module layout, data flow, API table, design decisions
+    adk-tool-design-lessons.md         # Lessons learned from ADK tool and memory design
   analysis/
     api-setup-guide.md                 # How to obtain each API key (GNews, Gemini, Discord, Calendar)
     google-calendar-private-setup.md   # External Terraform workflow for Google Calendar service account
+  integrations/
+    supabase-vector-adk.md             # Supabase pgvector schema setup for ADK memory
   plans/
     plan-daily-briefing-agent.md       # Original feature plan and phase breakdown
-    plan-adk-k8s-deployment.md         # Phase 2: container image + Kubernetes CronJob
+    plan-adk-k8s-deployment.md         # Phase 2: container image + Kubernetes Deployment
 ```

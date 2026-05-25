@@ -1,10 +1,20 @@
-"""Local test runner — identical to main.py but prints the digest to stdout
-instead of posting to Discord. Safe to run behind a firewall."""
+"""Local test runner — prints the digest to stdout instead of posting to Discord.
+Safe to run behind a firewall.
+
+Differences from main.py / the production bot:
+  - Uses a separate app_name ("daily_briefing_test") to isolate Supabase memory
+    from the production scope.
+  - Prints all agent text output directly to stdout; no delivery tool needed.
+"""
 
 import asyncio
-import os
 import sys
 from pathlib import Path
+
+# Force UTF-8 output so emoji/Unicode in the briefing don't crash on Windows
+# (default cp1252 terminal codec cannot encode most Unicode characters).
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -12,48 +22,32 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from google.adk import Agent  # noqa: E402
-from google.adk.models.lite_llm import LiteLlm  # noqa: E402
-from google.adk.runners import InMemoryRunner  # noqa: E402
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService  # noqa: E402
+from google.adk.runners import Runner  # noqa: E402
+from google.adk.sessions.in_memory_session_service import InMemorySessionService  # noqa: E402
 from google.genai import types  # noqa: E402
 
-from daily_briefing.tools.calendar_events import get_calendar_events  # noqa: E402
-from daily_briefing.tools.news import get_news  # noqa: E402
-from daily_briefing.tools.sports import get_sports_scores  # noqa: E402
-from daily_briefing.tools.weather import get_weather  # noqa: E402
+from daily_briefing.agent import make_agent, now_et  # noqa: E402
+from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService  # noqa: E402
 
 APP_NAME = "daily_briefing_test"
 USER_ID = "local"
 
-
-def print_briefing(message: str) -> str:
-    """Console stand-in for send_discord: prints the briefing to stdout."""
-    print("\n" + "=" * 60)
-    print(message)
-    print("=" * 60 + "\n")
-    return "Printed"
-
-
-_backend = os.getenv("BACKEND", "gemini").lower()
-if _backend == "ollama":
-    _ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-    _model = LiteLlm(model=f"ollama_chat/{_ollama_model}")
-else:
-    _model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
-
-_instruction = (Path(__file__).parent.parent / "instruction.md").read_text(encoding="utf-8")
-
-test_agent = Agent(
-    name="daily_briefing",
-    model=_model,
-    description="Daily morning digest agent.",
-    instruction=_instruction,
-    tools=[get_weather, get_news, get_sports_scores, get_calendar_events, print_briefing],
-)
+# Separate agent name keeps test sessions out of the production memory scope.
+test_agent = make_agent(name=APP_NAME)
 
 
 async def run() -> None:
-    runner = InMemoryRunner(agent=test_agent, app_name=APP_NAME)
+    runner = Runner(
+        agent=test_agent,
+        app_name=APP_NAME,
+        session_service=InMemorySessionService(),
+        artifact_service=InMemoryArtifactService(),
+        # Separate memory namespace from production so test runs don't
+        # pollute the real scheduler's memories.
+        memory_service=SupabaseMemoryService(),
+    )
+
     session = await runner.session_service.create_session(
         app_name=APP_NAME, user_id=USER_ID
     )
@@ -66,10 +60,11 @@ async def run() -> None:
             parts=[
                 types.Part(
                     text=(
+                        f"Current date and time: {now_et()}\n\n"
                         "Fetch weather for Grand Rapids MI, top news plus the latest cloud "
                         "and AI news, NFL/MLB/CFL scores (highlight Detroit Lions, Toronto "
                         "Blue Jays, Hamilton Tiger-Cats), and today's calendar events. "
-                        "Write and send the morning digest."
+                        "Write the morning digest."
                     )
                 )
             ],
@@ -78,7 +73,10 @@ async def run() -> None:
         if event.content:
             for part in event.content.parts or []:
                 if part.text:
-                    print(part.text)
+                    print(part.text, flush=True)
+
+    # Session persistence is handled automatically by the agent's
+    # after_agent_callback (_save_to_memory in agent.py).
 
 
 if __name__ == "__main__":
