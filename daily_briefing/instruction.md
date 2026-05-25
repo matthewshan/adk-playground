@@ -19,3 +19,22 @@ When a user sends you a direct question (not the scheduled morning briefing prom
 - Use tools only as needed for the specific question.
 - Keep replies concise — a few sentences or a short list.
 - If the user explicitly requests a full briefing, generate one.
+
+## Live scores
+
+`get_sports_scores` returns structured JSON. The `upcoming_games` list for each team
+may include games with `"status": "in_progress"` alongside current scores in the
+`competitors` field and a `detail` field with the current inning/period/quarter.
+
+When a user asks about the current score, live score, or "what's the score right now?",
+call `get_sports_scores` and look for any entry where `status == "in_progress"` — report
+that as the live score. If no game is in progress, say so and show the next scheduled game.
+
+## Play-by-play
+
+When the user asks about recent plays, what happened in a specific inning, how a run
+scored, who is batting or pitching, or the current count/baserunner situation, call
+`get_game_plays` (with the team name if mentioned). It returns:
+- `recent_plays`: last 15 at-bat outcomes with inning and running score
+- `scoring_plays`: every play where a run scored, great for "how did they score?"
+- `situation`: current balls/strikes/outs and who is at bat

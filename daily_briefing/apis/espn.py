@@ -99,29 +99,31 @@ def _parse_score(raw: object) -> str:
     return str(raw) if raw is not None else ""
 
 
-def format_upcoming_event_line(event: dict, event_dt: datetime.datetime) -> str:
-    """Format one upcoming/live ESPN event into a display string."""
-    status_type = (event.get("status") or {}).get("type", {})
-    short_detail: str = status_type.get("shortDetail", "")
+def _extract_competitors(event: dict) -> list[dict]:
+    """Extract competitor team names and scores from an ESPN event."""
     comps = event.get("competitions", [])
-    score_parts = [
-        f"{(c.get('team') or {}).get('displayName', '')} {_parse_score(c.get('score'))}".strip()
+    if not comps:
+        return []
+    return [
+        {
+            "team": (c.get("team") or {}).get("displayName", ""),
+            "score": _parse_score(c.get("score")),
+        }
         for c in comps[0].get("competitors", [])
     ]
-    score_str = " vs ".join(score_parts)
 
-    # Strip leading "M/D - " from shortDetail; fall back to UTC-4 (EDT) derivation
-    time_part = re.sub(r"^\d+/\d+\s*-\s*", "", short_detail).strip()
-    if not time_part or time_part.lower() in ("scheduled", "tbd"):
-        local_hour = (event_dt.hour - 4) % 24
-        am_pm = "PM" if local_hour >= 12 else "AM"
-        h12 = local_hour % 12 or 12
-        time_part = f"{h12}:{event_dt.strftime('%M')} {am_pm} EDT"
 
-    event_date = event_dt.date()
-    date_str = f"{event_date.strftime('%b')} {event_date.day}"
-    preseason_suffix = " (Preseason)" if is_preseason_event(event) else ""
-    return f"{date_str} @ {time_part} — {score_str}{preseason_suffix}"
+def _game_time_utc(event: dict) -> str:
+    """Return the ISO 8601 UTC game time string, or empty string if unavailable."""
+    return event.get("date", "")
+
+
+def _scheduled_time_et(event_dt: datetime.datetime) -> str:
+    """Convert a UTC datetime to a 12-hour ET time string (EDT = UTC-4)."""
+    local_hour = (event_dt.hour - 4) % 24
+    am_pm = "PM" if local_hour >= 12 else "AM"
+    h12 = local_hour % 12 or 12
+    return f"{h12}:{event_dt.strftime('%M')} {am_pm} ET"
 
 
 def get_recent_results(
@@ -130,15 +132,16 @@ def get_recent_results(
     team_name: str,
     today: datetime.date,
     yesterday: datetime.date,
-) -> list[tuple[datetime.date, str]]:
+) -> list[dict]:
     """Fetch completed game results for yesterday and today from the scoreboard.
 
     Failures are silently swallowed — recent data is best-effort.
 
     Returns:
-        List of (date, formatted_result_string) tuples for completed games.
+        List of game dicts for completed games, each with keys:
+        date, day_label, status ("final"), detail, is_preseason, competitors.
     """
-    recent_results: list[tuple[datetime.date, str]] = []
+    recent_results: list[dict] = []
     for check_date in (yesterday, today):
         try:
             resp = requests.get(
@@ -153,19 +156,18 @@ def get_recent_results(
                 status_type = (event.get("status") or {}).get("type", {})
                 if not status_type.get("completed", False):
                     continue
-                comps = event.get("competitions", [])
-                if not comps:
+                competitors = _extract_competitors(event)
+                if not competitors:
                     continue
-                score_parts = [
-                    f"{(c.get('team') or {}).get('displayName', '')} {_parse_score(c.get('score'))}".strip()
-                    for c in comps[0].get("competitors", [])
-                ]
                 day_label = "Today" if check_date == today else "Yesterday"
-                sd = status_type.get("shortDetail", "Final")
-                preseason_suffix = " (Preseason)" if is_preseason_event(event) else ""
-                recent_results.append(
-                    (check_date, f"{day_label}: {' vs '.join(score_parts)} — {sd}{preseason_suffix}")
-                )
+                recent_results.append({
+                    "date": check_date.isoformat(),
+                    "day_label": day_label,
+                    "status": "final",
+                    "detail": status_type.get("shortDetail", "Final"),
+                    "is_preseason": is_preseason_event(event),
+                    "competitors": competitors,
+                })
         except requests.RequestException:
             pass
     return recent_results
@@ -173,17 +175,19 @@ def get_recent_results(
 
 def get_upcoming_games(
     sched_events: list[dict], today: datetime.date
-) -> list[tuple[datetime.date, str]]:
-    """Parse upcoming (not-yet-completed) games from a team schedule event list.
+) -> list[dict]:
+    """Parse upcoming and in-progress games from a team schedule event list.
 
     Args:
         sched_events: Raw event dicts from the ESPN team schedule endpoint.
         today: Events before this date are excluded.
 
     Returns:
-        List of (date, formatted_game_string) tuples, sorted chronologically.
+        List of game dicts sorted chronologically, each with keys:
+        date, game_time_utc, status ("scheduled" or "in_progress"),
+        detail, is_preseason, competitors.
     """
-    upcoming: list[tuple[datetime.date, str]] = []
+    upcoming: list[dict] = []
     for event in sched_events:
         event_date_str = event.get("date", "")
         if not event_date_str:
@@ -197,23 +201,49 @@ def get_upcoming_games(
         event_date = event_dt.date()
         if event_date < today:
             continue
-        comps = event.get("competitions", [])
-        if not comps:
-            continue
         status_type = (event.get("status") or {}).get("type", {})
         if status_type.get("completed", False):
             continue
-        upcoming.append((event_date, format_upcoming_event_line(event, event_dt)))
+        competitors = _extract_competitors(event)
+        if not competitors:
+            continue
 
-    upcoming.sort(key=lambda x: x[0])
+        state = status_type.get("state", "pre")
+        game_status = "in_progress" if state == "in" else "scheduled"
+
+        # For scheduled games use the local time string; for live games use
+        # shortDetail which contains clock/inning info (e.g. "Bottom 7th").
+        short_detail = status_type.get("shortDetail", "")
+        if game_status == "scheduled":
+            time_part = re.sub(r"^\d+/\d+\s*-\s*", "", short_detail).strip()
+            if not time_part or time_part.lower() in ("scheduled", "tbd"):
+                time_part = _scheduled_time_et(event_dt)
+            detail = time_part
+        else:
+            detail = short_detail
+
+        upcoming.append({
+            "date": event_date.isoformat(),
+            "game_time_utc": event_date_str,
+            "status": game_status,
+            "detail": detail,
+            "is_preseason": is_preseason_event(event),
+            "competitors": competitors,
+        })
+
+    upcoming.sort(key=lambda x: x["date"])
     return upcoming
 
 
 def get_today_scoreboard_upcoming_games(
     sport: str, league: str, team_name: str, today: datetime.date
-) -> list[tuple[datetime.date, str]]:
-    """Fallback: get today's live/scheduled games directly from the scoreboard."""
-    upcoming: list[tuple[datetime.date, str]] = []
+) -> list[dict]:
+    """Fallback: get today's live/scheduled games directly from the scoreboard.
+
+    Returns:
+        List of game dicts in the same shape as get_upcoming_games().
+    """
+    upcoming: list[dict] = []
     try:
         resp = requests.get(
             f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard",
@@ -239,21 +269,148 @@ def get_today_scoreboard_upcoming_games(
             event_date = event_dt.date()
             if event_date < today:
                 continue
-            comps = event.get("competitions", [])
-            if not comps:
+            competitors = _extract_competitors(event)
+            if not competitors:
                 continue
-            upcoming.append((event_date, format_upcoming_event_line(event, event_dt)))
+
+            state = status_type.get("state", "pre")
+            game_status = "in_progress" if state == "in" else "scheduled"
+
+            short_detail = status_type.get("shortDetail", "")
+            if game_status == "scheduled":
+                time_part = re.sub(r"^\d+/\d+\s*-\s*", "", short_detail).strip()
+                if not time_part or time_part.lower() in ("scheduled", "tbd"):
+                    time_part = _scheduled_time_et(event_dt)
+                detail = time_part
+            else:
+                detail = short_detail
+
+            upcoming.append({
+                "date": event_date.isoformat(),
+                "game_time_utc": event_date_str,
+                "status": game_status,
+                "detail": detail,
+                "is_preseason": is_preseason_event(event),
+                "competitors": competitors,
+            })
     except requests.RequestException:
         pass
-    upcoming.sort(key=lambda x: x[0])
+    upcoming.sort(key=lambda x: x["date"])
     return upcoming
 
 
-def get_division_standings(sport: str, league: str, team_id: str) -> str:
+def get_game_plays(
+    sport: str, league: str, team_name: str, today: datetime.date
+) -> dict | None:
+    """Fetch live play-by-play summary for a team's game today.
+
+    Hits the scoreboard to find the event ID, then fetches the ESPN summary
+    endpoint which contains pitch-level play data, the current game situation,
+    and scoring plays.
+
+    Args:
+        sport: ESPN sport slug (e.g. "baseball").
+        league: ESPN league slug (e.g. "mlb").
+        team_name: Full team display name to match in the scoreboard.
+        today: Date to query.
+
+    Returns:
+        Dict with keys: game, status, detail, situation, recent_plays (last 15
+        narrative plays), scoring_plays (all plays where a run scored).
+        Returns None if no game is found today or on any request error.
+    """
+    # Step 1: find the event ID from today's scoreboard.
+    try:
+        sb_resp = requests.get(
+            f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard",
+            params={"dates": today.strftime("%Y%m%d")},
+            timeout=10,
+        )
+        sb_resp.raise_for_status()
+        event_id = None
+        event_name = None
+        event_status_type: dict = {}
+        for event in sb_resp.json().get("events", []):
+            if team_name.lower() not in event.get("name", "").lower():
+                continue
+            event_id = event["id"]
+            event_name = event.get("name", "")
+            event_status_type = (event.get("status") or {}).get("type", {})
+            break
+        if not event_id:
+            return None
+    except requests.RequestException:
+        return None
+
+    # Step 2: fetch the full game summary.
+    try:
+        summary_resp = requests.get(
+            f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/summary",
+            params={"event": event_id},
+            timeout=10,
+        )
+        summary_resp.raise_for_status()
+        data = summary_resp.json()
+    except requests.RequestException:
+        return None
+
+    all_plays = data.get("plays", [])
+
+    # Readable plays: summaryType "N" = at-bat outcomes, "S" = scoring plays,
+    # "I" = inning boundary markers. Exclude pitch-level ("P"), at-bat-start
+    # ("A"), and empty-text plays.
+    def _play_dict(p: dict) -> dict:
+        return {
+            "inning": p.get("period", {}).get("displayValue", ""),
+            "text": p.get("text", ""),
+            "away_score": p.get("awayScore", 0),
+            "home_score": p.get("homeScore", 0),
+            "scoring_play": p.get("scoringPlay", False),
+        }
+
+    narrative_plays = [
+        _play_dict(p) for p in all_plays
+        if p.get("summaryType") in ("N", "S", "I") and p.get("text")
+    ]
+    # Scoring plays from ALL play types — a run can score on any play type.
+    scoring_plays = [_play_dict(p) for p in all_plays if p.get("scoringPlay")]
+
+    # Current at-bat text (most recent "start-batterpitcher" play).
+    current_at_bat = ""
+    for p in reversed(all_plays):
+        if p.get("type", {}).get("type") == "start-batterpitcher":
+            current_at_bat = p.get("text", "")
+            break
+
+    # Situation: balls/strikes/outs/baserunners.
+    sit = data.get("situation", {})
+    situation = {
+        "balls": sit.get("balls", 0),
+        "strikes": sit.get("strikes", 0),
+        "outs": sit.get("outs", 0),
+        "on_first": sit.get("onFirst") is not None,
+        "on_second": sit.get("onSecond") is not None,
+        "on_third": sit.get("onThird") is not None,
+        "current_at_bat": current_at_bat,
+    }
+
+    return {
+        "game": event_name,
+        "status": "in_progress" if event_status_type.get("state") == "in" else "scheduled",
+        "detail": event_status_type.get("shortDetail", ""),
+        "situation": situation,
+        "recent_plays": narrative_plays[-15:],
+        "scoring_plays": scoring_plays,
+    }
+
+
+def get_division_standings(sport: str, league: str, team_id: str) -> dict | None:
     """Fetch the division standings table for the team's division.
 
     Returns:
-        Formatted multi-line standings string, or empty string if unavailable.
+        Dict with keys "division" (str) and "teams" (list of team dicts with
+        keys: team, record, games_behind, is_tracked). Returns None if the
+        team's division cannot be found.
 
     Raises:
         requests.RequestException: If the ESPN standings endpoint cannot be reached.
@@ -276,7 +433,7 @@ def get_division_standings(sport: str, league: str, team_id: str) -> str:
             continue
 
         group_name = group.get("name", "Division")
-        rows: list[str] = [f"  {group_name} Standings:"]
+        teams: list[dict] = []
         for entry in entries:
             t_name = entry.get("team", {}).get("displayName", "?")
             stats = {
@@ -287,9 +444,13 @@ def get_division_standings(sport: str, league: str, team_id: str) -> str:
                 f"{stats.get('wins', '?')}-{stats.get('losses', '?')}"
             )
             gb = stats.get("gamesbehind") or stats.get("gamesback", "")
-            gb_str = f", {gb} GB" if gb and gb not in ("-", "0", "0.0") else ""
-            marker = " ◀" if str(entry.get("team", {}).get("id", "")) == team_id else ""
-            rows.append(f"    {t_name}: {record}{gb_str}{marker}")
-        return "\n".join(rows)
+            is_tracked = str(entry.get("team", {}).get("id", "")) == team_id
+            teams.append({
+                "team": t_name,
+                "record": record,
+                "games_behind": gb if gb else "-",
+                "is_tracked": is_tracked,
+            })
+        return {"division": group_name, "teams": teams}
 
-    return ""
+    return None

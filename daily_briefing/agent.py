@@ -10,7 +10,7 @@ from google.adk.tools.load_memory_tool import LoadMemoryTool
 
 from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.news import get_news
-from daily_briefing.tools.sports import get_sports_scores
+from daily_briefing.tools.sports import get_game_plays, get_sports_scores
 from daily_briefing.tools.weather import get_weather
 
 _instruction = (Path(__file__).parent / "instruction.md").read_text(encoding="utf-8")
@@ -65,6 +65,7 @@ def make_agent(name: str = "daily_briefing") -> Agent:
             get_weather,
             get_news,
             get_sports_scores,
+            get_game_plays,
             get_calendar_events,
             LoadMemoryTool(),  # LLM can search past briefings on demand
         ],
