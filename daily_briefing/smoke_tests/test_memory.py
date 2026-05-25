@@ -48,7 +48,7 @@ _SESSION_ID = f"smoke-test-{uuid.uuid4()}"
 _KNN_MEMORIES = [
     "I love hiking and outdoor adventures in the mountains",
     "My favourite food is sushi, especially salmon nigiri",
-    "I prefer Python over JavaScript for backend development",
+    "I prefer C# over Python for backend development",
 ]
 _KNN_QUERY = "What do I like to eat?"
 _KNN_EXPECTED_KEYWORD = "sushi"
