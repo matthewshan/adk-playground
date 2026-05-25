@@ -16,6 +16,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+# Force UTF-8 output so emoji/Unicode in standings don't crash on Windows
+# (default cp1252 terminal codec cannot encode ◀ and similar characters).
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # Allow running this file directly from any working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 

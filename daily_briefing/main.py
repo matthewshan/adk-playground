@@ -11,17 +11,27 @@ from dotenv import load_dotenv
 _ENV_FILE = Path(__file__).parent / ".env"
 load_dotenv(_ENV_FILE)
 
-from google.adk.runners import InMemoryRunner  # noqa: E402
+from google.adk.runners import Runner  # noqa: E402
+from google.adk.sessions.in_memory_session_service import InMemorySessionService  # noqa: E402
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService  # noqa: E402
 from google.genai import types  # noqa: E402
 
-from daily_briefing.agent import root_agent  # noqa: E402
+from daily_briefing.agent import now_et, root_agent  # noqa: E402
+from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService  # noqa: E402
 
 APP_NAME = "daily_briefing"
 USER_ID = "scheduler"
 
 
 async def run() -> None:
-    runner = InMemoryRunner(agent=root_agent, app_name=APP_NAME)
+    runner = Runner(
+        agent=root_agent,
+        app_name=APP_NAME,
+        session_service=InMemorySessionService(),
+        artifact_service=InMemoryArtifactService(),
+        memory_service=SupabaseMemoryService(),
+    )
+
     session = await runner.session_service.create_session(
         app_name=APP_NAME, user_id=USER_ID
     )
@@ -34,6 +44,7 @@ async def run() -> None:
             parts=[
                 types.Part(
                     text=(
+                        f"Current date and time: {now_et()}\n\n"
                         "Fetch weather for Grand Rapids MI, top news plus the latest cloud "
                         "and AI news, NFL/MLB/CFL scores (highlight Detroit Lions, Toronto "
                         "Blue Jays, Hamilton Tiger-Cats), and today's calendar events. "

@@ -47,24 +47,32 @@ Run the following SQL once using either the
 → **New query**) or `psql` with the connection string from Section 1.
 
 ```sql
--- pgvector is pre-enabled on all Supabase projects.
+-- Enable pgvector (must run this first — it is not auto-enabled).
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Drop old objects if re-running after a dimension change.
+DROP FUNCTION IF EXISTS match_agent_memory(vector, int);
+DROP TABLE IF EXISTS agent_memory;
+
 -- Create a table for ADK agent memory.
+-- gemini-embedding-001 natively outputs 3072 dims, but pgvector's IVFFlat/HNSW
+-- indexes cap at 2000. We configure output_dimensionality=1536 in the Python client.
 CREATE TABLE agent_memory (
   id          bigserial    PRIMARY KEY,
   session_id  text         NOT NULL,
   content     text         NOT NULL,
-  embedding   vector(768),           -- adjust to match your embedding model's dimensions
+  embedding   vector(1536),
   created_at  timestamptz  DEFAULT now()
 );
 
--- IVFFlat index for approximate nearest-neighbour search.
--- Rule of thumb: lists ≈ sqrt(row count). Re-create when the table grows significantly.
-CREATE INDEX ON agent_memory USING ivfflat (embedding vector_cosine_ops)
-  WITH (lists = 100);
+-- HNSW index for approximate nearest-neighbour search.
+-- Handles dynamic inserts correctly (unlike IVFFlat, which computes centroids at
+-- creation time and requires a full reindex after bulk loads).
+CREATE INDEX ON agent_memory USING hnsw (embedding vector_cosine_ops);
 
 -- RPC function used by the Python memory tool for similarity search.
 CREATE OR REPLACE FUNCTION match_agent_memory(
-  query_embedding vector(768),
+  query_embedding vector(1536),
   match_count     int DEFAULT 5
 )
 RETURNS TABLE (id bigint, session_id text, content text, similarity float)
@@ -78,9 +86,10 @@ AS $$
 $$;
 ```
 
-> **Dimension note:** adjust `vector(768)` to match your embedding model.
-> Common values: `768` (Google `text-embedding-004`), `1536` (OpenAI `text-embedding-3-small`),
-> `3072` (OpenAI `text-embedding-3-large`).
+> **Model note:** `gemini-embedding-001` (successor to deprecated `text-embedding-004`)
+> outputs 3072 dims natively, but pgvector's IVFFlat and HNSW indexes cap at 2000.
+> We truncate to **1536** via `output_dimensionality` — still excellent quality.
+> The Python client (`tools/memory.py`) sets this automatically.
 
 ---
 

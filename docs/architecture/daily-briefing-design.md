@@ -17,7 +17,7 @@ Intended deployment: a **Kubernetes CronJob** running daily at 7 AM.
 daily_briefing/
   __init__.py           # package marker
   Dockerfile            # container image for the scheduled job
-  agent.py              # ADK Agent — wires model + tools
+  agent.py              # ADK Agent — model selection, make_agent() factory, now_et() helper
   instruction.md        # system prompt (edit without touching code)
   main.py               # InMemoryRunner entry point
   apis/
@@ -74,8 +74,10 @@ main.py / smoke_tests/test_agent.py
 
 ## Sports tool behavior
 
-`get_sports_scores()` accepts a list of `TrackedTeam` objects from the caller. The smoke
-tests use the following set:
+`get_sports_scores()` always runs against the three default teams (Lions, Blue
+Jays, Tiger-Cats) defined in `_DEFAULT_TEAMS`. The function accepts an optional
+`teams` argument that smoke tests use to pass a custom list of `TrackedTeam`
+objects:
 
 ```python
 teams = [
@@ -84,6 +86,14 @@ teams = [
   TrackedTeam("CFL", "football", "cfl", "Hamilton Tiger-Cats"),
 ]
 ```
+
+The `teams` parameter has **no type annotation** intentionally — annotating it
+with `list[TrackedTeam] | None` generates a JSON Schema that the Gemini API
+rejects, silently breaking tool calls. See
+[adk-tool-design-lessons.md](adk-tool-design-lessons.md) §1–2.
+
+The function guards against the LLM passing invalid values (e.g. a list of
+strings) and falls back to `_DEFAULT_TEAMS` in that case.
 
 Per team the tool returns a **record** when available, **recent completed games**,
 **upcoming games** (next 3), and best-effort **standings**.
@@ -113,10 +123,12 @@ follow the same pattern.
 - **Configurable model backend**: `BACKEND=gemini` uses `GEMINI_MODEL`; `BACKEND=ollama` wraps the local model through `LiteLlm`.
 - **ESPN-first sports with fallback**: the sports tool uses ESPN when available and falls back to TheSportsDB for current CFL events.
 - **Runnable smoke tests live beside the app**: `daily_briefing/smoke_tests/` contains live tool tests plus a local agent runner.
+- **Agent factory for swappable output**: `agent.py` exposes `make_agent(output_tool, name)` so callers can substitute any output callable (e.g. a `print_briefing` stub in smoke tests) without duplicating model selection, instruction loading, or the tool list. `root_agent = make_agent()` is the production default; `test_agent.py` calls `make_agent(output_tool=print_briefing, name="daily_briefing_test")`. `now_et()` (Eastern-Time timestamp helper) is also exported from `agent.py` and shared by both runners.
 - **Plain Python callables**: ADK picks up tools automatically — no decorators or schemas needed.
 - **Single-shot execution**: `InMemoryRunner` runs the agent once and exits; no persistent session state.
 - **System prompt in `instruction.md`**: editable without changing Python code.
 - **Off-season detection**: sports output suppresses inactive leagues and shows the next scheduled game date when a team is out of season.
+- **Avoid complex type annotations on tool parameters**: ADK's JSON schema generator turns dataclass/union types into `$defs`/`$ref` schemas that the Gemini API rejects. Use bare `param=None` (no annotation) and guard against invalid LLM-supplied values at the top of the function. See [adk-tool-design-lessons.md](adk-tool-design-lessons.md).
 
 ---
 
@@ -126,3 +138,4 @@ follow the same pattern.
 - [API Setup Guide](../analysis/api-setup-guide.md) — how to obtain each API key
 - [Google Calendar Private Setup](../analysis/google-calendar-private-setup.md) — external Terraform workflow for service account
 - [K8s Deployment Plan](../plans/plan-adk-k8s-deployment.md) — Phase 2 container + CronJob
+- [ADK Tool Design Lessons](adk-tool-design-lessons.md) — pitfalls and patterns for writing ADK tool functions
