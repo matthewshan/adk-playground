@@ -61,8 +61,9 @@ python3 daily_briefing/smoke_tests/test_memory.py
 ### ADK web UI (dev/testing)
 ```bash
 # Option A — run directly without Docker (fastest)
-adk web --host 0.0.0.0 --port 8000 daily_briefing
-# Then open http://localhost:8000
+# Run from the repo root — ADK discovers daily_briefing/ automatically
+adk web --host 0.0.0.0 --port 8000
+# Then open http://localhost:8000 and select "daily_briefing"
 
 # Option B — run in Docker
 docker build -t daily-briefing-dev -f daily_briefing/Dockerfile.dev .

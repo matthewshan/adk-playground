@@ -15,5 +15,6 @@ EXPOSE 8000
 USER agent
 
 # Starts the ADK dev UI on all interfaces so Docker port-mapping works.
+# WORKDIR /app contains daily_briefing/ — ADK discovers it automatically.
 # Access at http://localhost:8000 after: docker run -p 8000:8000 ...
-CMD ["adk", "web", "--host", "0.0.0.0", "--port", "8000", "daily_briefing"]
+CMD ["adk", "web", "--host", "0.0.0.0", "--port", "8000"]
