@@ -32,6 +32,13 @@ cp daily_briefing/.env.example daily_briefing/.env
 python3 -m daily_briefing.main
 ```
 
+### Run the Discord bot (bidirectional conversation)
+```bash
+# Requires DISCORD_BOT_TOKEN and DISCORD_BOT_CHANNEL_ID in daily_briefing/.env
+# See daily_briefing/.env.example for setup instructions
+python3 -m daily_briefing.discord_bot
+```
+
 ### Smoke tests (no agent, just tool calls)
 ```bash
 # All tools (skips keyed APIs when env vars are absent)
@@ -42,12 +49,20 @@ python3 daily_briefing/smoke_tests/test_sports.py
 
 # Full agent run — prints digest instead of posting to Discord
 python3 daily_briefing/smoke_tests/test_agent.py
+
+# Discord bot unit tests — no token required
+python3 daily_briefing/smoke_tests/test_discord_bot.py
 ```
 
 ### Docker
 ```bash
+# CronJob image
 docker build -t daily-briefing -f daily_briefing/Dockerfile .
 docker run --env-file daily_briefing/.env daily-briefing
+
+# Discord bot image (long-running)
+docker build -t daily-briefing-bot -f daily_briefing/Dockerfile.bot .
+docker run --env-file daily_briefing/.env daily-briefing-bot
 ```
 
 ### Minimal Ollama smoke test
@@ -73,7 +88,10 @@ adk-playground/
   daily_briefing/         # Morning digest agent (primary project)
     agent.py              # ADK Agent wiring — model selection + tool registration
     instruction.md        # System prompt (the ONLY place the prompt lives)
-    main.py               # Single-shot runner (InMemoryRunner)
+    main.py               # Single-shot runner (InMemoryRunner) — used by CronJob
+    discord_bot.py        # Long-running Discord bot for bidirectional conversation
+    Dockerfile            # Container image for the scheduled CronJob
+    Dockerfile.bot        # Container image for the Discord bot (long-running)
     .env.example          # Required environment variables — copy to .env
     apis/                 # Raw HTTP clients (one file per external service)
       discord.py
@@ -91,6 +109,7 @@ adk-playground/
     smoke_tests/          # Runnable integration / unit tests
       test_agent.py
       test_apis.py
+      test_discord_bot.py
       test_sports.py
   docs/                   # Architecture, setup, prompt, and deployment notes
   requirements.txt        # Shared Python dependencies
@@ -111,7 +130,9 @@ All secrets live in `daily_briefing/.env` (never committed). Copy from
 | `OLLAMA_API_BASE` | if Ollama | e.g. `http://127.0.0.1:11434` |
 | `OLLAMA_MODEL` | if Ollama | e.g. `qwen2.5:7b` |
 | `GNEWS_API_KEY` | yes | GNews free tier |
-| `DISCORD_WEBHOOK_URL` | yes | Incoming webhook URL |
+| `DISCORD_WEBHOOK_URL` | yes | Incoming webhook URL (CronJob outbound posts) |
+| `DISCORD_BOT_TOKEN` | if using bot | Discord bot token — Developer Portal → Bot → Token |
+| `DISCORD_BOT_CHANNEL_ID` | if using bot | Channel ID the bot listens in |
 | `GOOGLE_CALENDAR_ID` | yes | Calendar email address |
 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | yes | Base64-encoded service account JSON |
 
@@ -140,6 +161,7 @@ documents below, update the relevant file in the same commit — do not leave do
 | New API keys or env vars | `daily_briefing/.env.example` and `docs/analysis/api-setup-guide.md` |
 | Deployment or infrastructure | `docs/plans/plan-adk-k8s-deployment.md` |
 | Prompt / context-engineering patterns | `docs/context-engineering.md` |
+| `discord_bot.py` structure or bot behaviour | `docs/architecture/daily-briefing-design.md` |
 
 ---
 

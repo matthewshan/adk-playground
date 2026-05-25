@@ -16,10 +16,12 @@ Intended deployment: a **Kubernetes CronJob** running daily at 7 AM.
 ```
 daily_briefing/
   __init__.py           # package marker
-  Dockerfile            # container image for the scheduled job
-  agent.py              # ADK Agent — wires model + tools
+  Dockerfile            # container image for the scheduled CronJob
+  Dockerfile.bot        # container image for the long-running Discord bot
+  agent.py              # ADK Agent — wires model + tools (shared by both runners)
   instruction.md        # system prompt (edit without touching code)
-  main.py               # InMemoryRunner entry point
+  main.py               # single-shot InMemoryRunner — used by the CronJob
+  discord_bot.py        # long-running Discord bot for bidirectional conversation
   apis/
     __init__.py         # package marker for raw API clients
     discord.py          # Discord webhook POST
@@ -39,12 +41,15 @@ daily_briefing/
     __init__.py         # package marker
     test_agent.py       # local runner that prints the digest instead of posting
     test_apis.py        # live smoke test for all tools
+    test_discord_bot.py # unit tests for discord_bot helpers (no token required)
     test_sports.py      # sports unit tests + live smoke test
 ```
 
 ---
 
 ## Data flow
+
+### Scheduled CronJob (`main.py`)
 
 ```
 main.py / smoke_tests/test_agent.py
@@ -56,6 +61,23 @@ main.py / smoke_tests/test_agent.py
        ├─ tools/calendar_events.py  → apis/google_calendar.py → Google Calendar API v3
        └─ tools/discord_webhook.py  → apis/discord.py         → Discord webhook POST
 ```
+
+### Discord bot (`discord_bot.py`)
+
+```
+discord_bot.py (long-running Deployment — replicas: 1)
+  └─ discord.py Gateway WebSocket
+       └─ on_message (all messages in DISCORD_BOT_CHANNEL_ID)
+            ├─ per-user asyncio.Lock  (serialises rapid messages from same user)
+            ├─ _get_or_create_session(user_id) → InMemoryRunner.session_service
+            └─ _run_agent(user_id, prompt)     → InMemoryRunner.run_async()
+                                                    └─ agent.py (same tools as CronJob)
+                  → message.channel.send() [chunked, ≤2000 chars per send]
+```
+
+Both runners import the same `agent.py` — tools and model config are shared.
+The two processes are independent: the CronJob terminates after each run; the bot
+stays alive until stopped.
 
 ---
 
@@ -69,6 +91,7 @@ main.py / smoke_tests/test_agent.py
 | `tools/sports.py` | `apis/thesportsdb.py` | TheSportsDB | None | Fallback for CFL schedules/results when ESPN lacks current data |
 | `tools/calendar_events.py` | `apis/google_calendar.py` | Google Calendar v3 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Service account; share calendar with the SA email |
 | `tools/discord_webhook.py` | `apis/discord.py` | Discord webhook | `DISCORD_WEBHOOK_URL` | POST; caller truncates to the 2000-character limit |
+| `discord_bot.py` | discord.py Gateway | Discord bot | `DISCORD_BOT_TOKEN` | Inbound messages → ADK agent → `channel.send()` |
 
 ---
 
@@ -114,7 +137,8 @@ follow the same pattern.
 - **ESPN-first sports with fallback**: the sports tool uses ESPN when available and falls back to TheSportsDB for current CFL events.
 - **Runnable smoke tests live beside the app**: `daily_briefing/smoke_tests/` contains live tool tests plus a local agent runner.
 - **Plain Python callables**: ADK picks up tools automatically — no decorators or schemas needed.
-- **Single-shot execution**: `InMemoryRunner` runs the agent once and exits; no persistent session state.
+- **Single-shot execution**: `InMemoryRunner` runs the agent once and exits; no persistent session state (CronJob path).
+- **Long-running bot with per-user sessions**: `discord_bot.py` keeps sessions alive in RAM, one per Discord user ID. A per-user `asyncio.Lock` serialises rapid back-to-back messages. Swapping `InMemoryRunner` for a `Runner` with a vector-DB memory service is a one-line change in `discord_bot.main()`.
 - **System prompt in `instruction.md`**: editable without changing Python code.
 - **Off-season detection**: sports output suppresses inactive leagues and shows the next scheduled game date when a team is out of season.
 

@@ -1,0 +1,18 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Non-root user for security (matches the CronJob Dockerfile convention)
+RUN useradd -m -u 1000 agent
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY daily_briefing/ daily_briefing/
+
+USER agent
+
+# Long-running bot process — kept alive by discord.py's event loop.
+# Unlike the CronJob image (daily_briefing/Dockerfile) this process never exits
+# on its own; deploy it as a Kubernetes Deployment with replicas: 1, not a CronJob.
+CMD ["python", "-m", "daily_briefing.discord_bot"]
