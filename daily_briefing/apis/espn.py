@@ -92,13 +92,20 @@ def is_preseason_event(event: dict) -> bool:
     return any("preseason" in token.lower() for token in tokens)
 
 
+def _parse_score(raw: object) -> str:
+    """Return a plain score string from whatever ESPN puts in the score field."""
+    if isinstance(raw, dict):
+        return raw.get("displayValue", str(raw.get("value", "")))
+    return str(raw) if raw is not None else ""
+
+
 def format_upcoming_event_line(event: dict, event_dt: datetime.datetime) -> str:
     """Format one upcoming/live ESPN event into a display string."""
     status_type = (event.get("status") or {}).get("type", {})
     short_detail: str = status_type.get("shortDetail", "")
     comps = event.get("competitions", [])
     score_parts = [
-        f"{(c.get('team') or {}).get('displayName', '')} {c.get('score', '')}".strip()
+        f"{(c.get('team') or {}).get('displayName', '')} {_parse_score(c.get('score'))}".strip()
         for c in comps[0].get("competitors", [])
     ]
     score_str = " vs ".join(score_parts)
@@ -150,7 +157,7 @@ def get_recent_results(
                 if not comps:
                     continue
                 score_parts = [
-                    f"{(c.get('team') or {}).get('displayName', '')} {c.get('score', '')}".strip()
+                    f"{(c.get('team') or {}).get('displayName', '')} {_parse_score(c.get('score'))}".strip()
                     for c in comps[0].get("competitors", [])
                 ]
                 day_label = "Today" if check_date == today else "Yesterday"

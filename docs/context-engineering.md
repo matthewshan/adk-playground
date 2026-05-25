@@ -46,3 +46,40 @@ If this smoke test works and you want something more realistic:
 1. Move to `qwen2.5:0.5b` first.
 2. Add one trivial tool only after plain chat works.
 3. Keep a separate smoke test prompt for regression checks.
+
+---
+
+## Tool signature design (ADK)
+
+The LLM generates tool calls as JSON. If your function signature uses complex
+Python types, the model will guess the shape incorrectly and the tool will fail.
+
+**Rules:**
+
+- **Use primitive types only in parameters** — `str`, `int`, `bool`, `list[str]`,
+  `dict`. Avoid dataclasses, Pydantic models, or custom classes in signatures.
+  The model cannot construct them; it will pass plain strings or dicts with
+  wrong keys, causing silent failures.
+
+- **Default fixed data inside the tool, not in the prompt** — If the instruction
+  hardcodes which teams/cities/topics to fetch, mirror that in the tool as a
+  `None`-defaulted parameter. The model should call `get_sports_scores()` with
+  no arguments, not `get_sports_scores(teams=[TrackedTeam(...)])`.
+
+- **Validate and fall back defensively** — Assume the LLM may pass something
+  invalid even with a correct schema. Check `isinstance` and fall back to
+  defaults rather than letting `AttributeError` propagate:
+
+  ```python
+  if not teams or not all(isinstance(t, (TrackedTeam, dict)) for t in teams):
+      teams = _DEFAULT_TEAMS
+  ```
+
+- **Surface errors in return values, not exceptions** — ADK passes tool return
+  values back to the model as text. An unhandled exception becomes an opaque
+  error message; the model then invents an excuse. Return a string like
+  `"Error fetching Lions scores: <reason>"` instead.
+
+**Why it matters for bigger models too:** GPT-4 / Gemini are better at
+guessing shapes but still fail on nested custom types. This rule holds
+regardless of model size.
