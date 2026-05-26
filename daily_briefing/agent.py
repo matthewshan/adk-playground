@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from google.adk import Agent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.lite_llm import LiteLlm
+from google.adk.tools.google_search_tool import GoogleSearchTool
 from google.adk.tools.load_memory_tool import LoadMemoryTool
 
 from daily_briefing.tools.calendar_events import get_calendar_events
@@ -68,6 +69,7 @@ def make_agent(name: str = "daily_briefing") -> Agent:
             get_game_plays,
             get_calendar_events,
             LoadMemoryTool(),  # LLM can search past briefings on demand
+            GoogleSearchTool(bypass_multi_tools_limit=True),  # Gemini-only; no-op on Ollama
         ],
         after_agent_callback=_save_to_memory,
     )
