@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Architecture deep-dive for ADK Daily Briefing — interactive flow diagrams for system overview, scheduled briefing, conversation flow, and memory system.">
+  <title>Architecture — ADK Daily Briefing</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ===== Navigation ===== -->
+<nav class="nav">
+  <div class="container nav-inner">
+    <a href="index.html" class="nav-logo">
+      <div class="logo-icon">🤖</div>
+      ADK Daily Briefing
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">Overview</a></li>
+      <li><a href="architecture.html" class="active">Architecture</a></li>
+      <li><a href="tools.html">Tools</a></li>
+      <li><a href="setup.html">Setup</a></li>
+    </ul>
+    <a href="https://github.com/matthewshan/adk-playground" class="nav-github" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<!-- ===== Page Header ===== -->
+<div style="padding: 3rem 0 0;">
+  <div class="container">
+    <div class="section-label">Architecture</div>
+    <h1 style="font-size:2rem; font-weight:700; margin-bottom:0.5rem;">How the agent is designed</h1>
+    <p style="color:var(--text-2); max-width:640px;">
+      Two views below — use scroll or the <strong style="color:var(--text-1);">+ −</strong> buttons to zoom.
+      On the <strong style="color:var(--text-1);">System Overview</strong> tab, click any node to see component details.
+    </p>
+  </div>
+</div>
+
+<!-- ===== Main ===== -->
+<main class="container page-content" style="padding-top: 2rem;">
+
+  <!-- ===== Tabs ===== -->
+  <section class="section">
+    <div class="tab-nav" id="arch-tabs">
+      <button class="tab-btn active" data-tab="overview">System Overview</button>
+      <button class="tab-btn" data-tab="scheduled">Scheduled Briefing</button>
+    </div>
+
+    <!-- ===== Tab: System Overview ===== -->
+    <div class="tab-panel active" id="tab-overview" style="padding-top:1.25rem;">
+      <p class="text-sm text-muted" style="margin-bottom:0.875rem;">
+        💡 Click any highlighted node to see component details
+      </p>
+      <div class="diagram-wrapper">
+        <div class="diagram-container diagram-zoom-wrap" style="flex:1; min-width:0; height:540px;">
+          <div class="zoom-bar">
+            <button class="zoom-btn" data-tab="overview" data-action="in"  title="Zoom in">+</button>
+            <button class="zoom-btn" data-tab="overview" data-action="reset" title="Reset">⊡</button>
+            <button class="zoom-btn" data-tab="overview" data-action="out" title="Zoom out">−</button>
+          </div>
+          <pre class="mermaid" id="overview-diagram">
+graph TB
+    USER["👤 User Message"]
+    CLOCK["🕐 7 AM ET\nDaily Schedule"]
+
+    subgraph BOT["  discord_bot.py  "]
+        direction TB
+        GW["Discord Gateway\nEvent Handler"]
+        LOCK["Per-User\nasyncio.Lock"]
+        SESS["ADK Runner\n+ Session Manager"]
+        CHUNK["Message Chunker\n≤ 2 000 chars"]
+    end
+
+    subgraph AGENTBOX["  agent.py (ADK Agent)  "]
+        direction LR
+        LLM["🤖 LLM\nGemini / Ollama"]
+        INSTR["📋 instruction.md\nSystem Prompt"]
+    end
+
+    subgraph TOOLBOX["  tools/  "]
+        direction LR
+        WT["🌤️ Weather"]
+        NT["📰 News"]
+        ST["🏈 Sports"]
+        CT["📅 Calendar"]
+        LMT["🧠 Memory"]
+    end
+
+    subgraph APIBOX["  apis/  "]
+        direction LR
+        OM["Open-Meteo"]
+        GN["GNews"]
+        ESPN_["ESPN"]
+        TSDB_["TheSportsDB"]
+        GCAL_["Google Calendar"]
+        SB_[("Supabase\npgvector")]
+    end
+
+    DCHAN["📢 Discord Channel"]
+
+    USER --> GW
+    CLOCK --> GW
+    GW --> LOCK --> SESS --> LLM
+    INSTR -. "system prompt" .-> LLM
+    LLM --> WT & NT & ST & CT & LMT
+    WT --> OM
+    NT --> GN
+    ST --> ESPN_
+    ST -. "CFL fallback" .-> TSDB_
+    CT --> GCAL_
+    LMT <--> SB_
+    LLM -- "after_agent_callback" --> SB_
+    LLM --> CHUNK --> DCHAN
+
+    click GW showDetail
+    click LOCK showDetail
+    click SESS showDetail
+    click LLM showDetail
+    click INSTR showDetail
+    click WT showDetail
+    click NT showDetail
+    click ST showDetail
+    click CT showDetail
+    click LMT showDetail
+    click OM showDetail
+    click GN showDetail
+    click ESPN_ showDetail
+    click TSDB_ showDetail
+    click GCAL_ showDetail
+    click SB_ showDetail
+          </pre>
+        </div>
+
+        <!-- Detail panel -->
+        <div class="detail-panel" id="detail-panel">
+          <div class="detail-panel-title" id="dp-title">Select a node</div>
+          <div class="detail-panel-file" id="dp-file"></div>
+          <div class="detail-panel-desc" id="dp-desc"></div>
+          <ul class="detail-panel-bullets" id="dp-bullets"></ul>
+          <p class="detail-hint" id="dp-hint">Click any node in the diagram to see details here.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Tab: Scheduled Briefing ===== -->
+    <div class="tab-panel" id="tab-scheduled" style="padding-top:1.25rem;">
+      <div class="diagram-container diagram-zoom-wrap" style="height:500px;">
+        <div class="zoom-bar">
+          <button class="zoom-btn" data-tab="scheduled" data-action="in"  title="Zoom in">+</button>
+          <button class="zoom-btn" data-tab="scheduled" data-action="reset" title="Reset">⊡</button>
+          <button class="zoom-btn" data-tab="scheduled" data-action="out" title="Zoom out">−</button>
+        </div>
+        <pre class="mermaid">
+sequenceDiagram
+    participant CLK as 🕐 Clock (7 AM ET)
+    participant BOT as discord_bot.py
+    participant AGENT as ADK Agent
+    participant TOOLS as Tools (all 5)
+    participant MEM as Supabase Memory
+    participant DISCORD as 📢 Discord Channel
+
+    CLK->>BOT: tasks.loop fires
+    BOT->>BOT: reset "scheduler" session
+    BOT->>DISCORD: channel.typing() ✍️
+    BOT->>AGENT: _run_agent("morning briefing")
+    activate AGENT
+
+    AGENT->>TOOLS: get_weather()
+    TOOLS-->>AGENT: conditions + forecast
+
+    AGENT->>TOOLS: get_news()
+    TOOLS-->>AGENT: headlines + tech highlights
+
+    AGENT->>TOOLS: get_sports_scores()
+    TOOLS-->>AGENT: Lions, Blue Jays, Tiger-Cats
+
+    AGENT->>TOOLS: get_calendar_events()
+    TOOLS-->>AGENT: upcoming events (7 days)
+
+    AGENT->>MEM: LoadMemoryTool (recall)
+    MEM-->>AGENT: relevant past sessions
+
+    AGENT-->>BOT: formatted digest text
+    deactivate AGENT
+
+    BOT->>MEM: after_agent_callback → _save_to_memory()
+
+    loop each chunk ≤ 2 000 chars
+        BOT->>DISCORD: channel.send(chunk)
+    end
+        </pre>
+      </div>
+      <div class="callout callout-blue mt-3">
+        <div class="callout-title">Scheduler isolation</div>
+        <p>
+          The scheduler runs under its own <code>"scheduler"</code> user ID, completely isolated from
+          per-user conversation sessions. The scheduler session resets each morning so the agent starts fresh
+          and doesn't accumulate a growing context window over time.
+        </p>
+      </div>
+    </div>
+
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== Module Layout ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Codebase</div>
+      <h2 class="section-title">Module layout</h2>
+      <p class="section-desc">The project follows a strict separation: raw HTTP clients in <code>apis/</code>, ADK-registered functions in <code>tools/</code>.</p>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Module</th>
+            <th>Role</th>
+            <th>Key contents</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>agent.py</code></td>
+            <td>Agent wiring</td>
+            <td><code>make_agent()</code>, <code>root_agent</code>, model selection (Gemini/Ollama), <code>after_agent_callback</code></td>
+          </tr>
+          <tr>
+            <td><code>instruction.md</code></td>
+            <td>System prompt</td>
+            <td>The only place agent behavior lives. Editable without code changes. Defines briefing format, conversational rules, and live score detection.</td>
+          </tr>
+          <tr>
+            <td><code>discord_bot.py</code></td>
+            <td>Bot entrypoint</td>
+            <td>Scheduled task (7 AM ET via <code>discord.ext.tasks</code>), <code>on_message</code> handler, session and lock management, message chunking</td>
+          </tr>
+          <tr>
+            <td><code>tools/</code></td>
+            <td>ADK tool functions</td>
+            <td><code>weather.py</code>, <code>news.py</code>, <code>sports.py</code>, <code>calendar_events.py</code> — plain Python callables registered with the ADK Agent</td>
+          </tr>
+          <tr>
+            <td><code>apis/</code></td>
+            <td>Raw HTTP clients</td>
+            <td><code>open_meteo.py</code>, <code>gnews.py</code>, <code>espn.py</code>, <code>thesportsdb.py</code>, <code>google_calendar.py</code>, <code>supabase.py</code></td>
+          </tr>
+          <tr>
+            <td><code>memory/</code></td>
+            <td>Memory service</td>
+            <td><code>supabase_memory_service.py</code> — implements ADK <code>BaseMemoryService</code> with pgvector insert + similarity search</td>
+          </tr>
+          <tr>
+            <td><code>smoke_tests/</code></td>
+            <td>Integration tests</td>
+            <td>Runnable scripts: <code>test_agent.py</code>, <code>test_apis.py</code>, <code>test_sports.py</code>, <code>test_discord_bot.py</code>, <code>test_memory.py</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== Design Decisions ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Design</div>
+      <h2 class="section-title">Key decisions</h2>
+      <p class="section-desc">Click each card to read the reasoning behind architectural choices.</p>
+    </div>
+    <div class="accordion">
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          Single bot process — no separate CronJob
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p>The Discord bot handles both the 7 AM daily briefing (via <code>discord.ext.tasks</code>) and real-time conversation. A single long-running Kubernetes Deployment replaces the original CronJob + webserver design. This eliminates cold-start latency, simplifies state sharing, and means one image to build and maintain.</p>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          Agent returns text — bot handles Discord delivery
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p>The ADK agent's only job is to produce a text response. <code>discord_bot.py</code> is solely responsible for chunking at 2 000 characters (Discord's limit) and calling <code>channel.send()</code>. This keeps the agent portable and testable via CLI (<code>python -m daily_briefing.main</code>) without needing a Discord connection.</p>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          Plain Python callables for tools — no decorators
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p>ADK tools are just regular Python functions — no <code>@tool</code> decorator is needed. This avoids a critical pitfall: complex type annotations (dataclasses, unions with <code>None</code>, nested generics) generate <code>$defs</code>/<code>$ref</code>/<code>anyOf</code> JSON schemas that Gemini silently rejects during function calling. The rule: use only <code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code> in tool signatures.</p>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          ESPN-first sports with TheSportsDB fallback for CFL
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p>ESPN's unofficial API covers NFL (Detroit Lions) and MLB (Toronto Blue Jays) well, but CFL (Hamilton Tiger-Cats) coverage is incomplete. TheSportsDB is used as a targeted fallback specifically for CFL data. Off-season detection is built into the sports tool to avoid producing confusing output when leagues aren't active.</p>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          System prompt in instruction.md — not in code
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p><code>instruction.md</code> is the single source of truth for agent behavior. It's loaded at startup with <code>Path(__file__).parent / "instruction.md"</code>. Prompt tweaks don't require code changes or a Docker rebuild — edit the file and restart the bot. This also makes the prompt easy to diff in version control and review in PRs.</p>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          Configurable model backend — Gemini or Ollama
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p>Setting <code>BACKEND=ollama</code> swaps in a local model via <code>LiteLlm</code>. This was added to work around Gemini free-tier rate limits during development. Recommended Ollama model: <code>qwen2.5:7b</code> (~4.5 GB, excellent tool-calling support). Avoid <code>llama3.1:8b</code> (poor tool use) and Gemma models (don't support ADK function calling at all).</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- ===== Footer ===== -->
+<footer class="footer">
+  <div class="container footer-inner">
+    <span class="footer-text">ADK Playground · Matthew Shan</span>
+    <div class="footer-links">
+      <a href="https://github.com/matthewshan/adk-playground" target="_blank" rel="noopener">GitHub</a>
+      <a href="index.html">Overview</a>
+      <a href="tools.html">Tools</a>
+      <a href="setup.html">Setup</a>
+    </div>
+  </div>
+</footer>
+
+<!-- ===== Scripts ===== -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+<script>
+  // ── Component detail data ─────────────────────────────────────────────────
+  const DETAILS = {
+    GW: {
+      title: 'Discord Gateway Handler',
+      file: 'discord_bot.py',
+      desc: 'Listens for Discord events via the Gateway WebSocket. Routes user messages to the agent and manages the bot lifecycle.',
+      bullets: ['Handles on_message events', 'Starts the daily briefing task on bot ready', 'Filters own messages to prevent response loops', 'Validates channel ID before posting'],
+    },
+    LOCK: {
+      title: 'Per-User asyncio.Lock',
+      file: 'discord_bot.py → _locks dict',
+      desc: 'One lock per Discord user ID. Serializes concurrent requests from the same user, preventing race conditions in shared session state.',
+      bullets: ['Created lazily per user ID', 'Queues rapid messages from same user', 'Released immediately after agent responds', 'Different users run concurrently'],
+    },
+    SESS: {
+      title: 'ADK Runner + Session Manager',
+      file: 'discord_bot.py → _get_or_create_session()',
+      desc: 'Creates and manages ADK sessions scoped per user. Each session carries the conversation history used as context by the LLM.',
+      bullets: ['Uses InMemorySessionService', 'get_or_create_session(user_id)', 'Scheduler session resets each morning', 'Shared runner instance across all users'],
+    },
+    LLM: {
+      title: 'Language Model (Gemini / Ollama)',
+      file: 'agent.py → make_agent()',
+      desc: 'The core reasoning engine. Decides which tools to call, interprets their results, and composes the final response.',
+      bullets: ['Configured via BACKEND env var', 'Gemini: uses google-generativeai', 'Ollama: LiteLlm adapter (ollama_chat/)', 'Default: gemini-3.1-flash-lite (500 RPD)'],
+    },
+    INSTR: {
+      title: 'System Prompt (instruction.md)',
+      file: 'daily_briefing/instruction.md',
+      desc: 'The single source of truth for agent behavior. Loaded at startup from disk — edit without code changes.',
+      bullets: ['2 000-char total response limit', 'Section order: Weather → News → Sports → Calendar', 'Defines briefing vs. conversational mode rules', 'Contains live score & play-by-play instructions'],
+    },
+    WT: {
+      title: 'Weather Tool',
+      file: 'tools/weather.py → apis/open_meteo.py',
+      desc: 'Fetches current conditions plus morning, afternoon, and evening forecasts for Grand Rapids, MI.',
+      bullets: ['API: Open-Meteo (free, no key needed)', 'Returns: temp, conditions, wind', 'Three forecast slots: 8 am, 1 pm, 6 pm', 'Coordinates hardcoded for Grand Rapids'],
+    },
+    NT: {
+      title: 'News Tool',
+      file: 'tools/news.py → apis/gnews.py',
+      desc: 'Fetches top headlines and cloud/AI focused stories from GNews.',
+      bullets: ['Requires GNEWS_API_KEY', 'Free tier: 100 requests / day', '3 general + 2 cloud/AI headlines', 'Returns: title, description, URL, source'],
+    },
+    ST: {
+      title: 'Sports Tool',
+      file: 'tools/sports.py → apis/espn.py + thesportsdb.py',
+      desc: 'Fetches scores, records, schedules, and standings for Lions, Blue Jays, and Tiger-Cats.',
+      bullets: ['Primary: ESPN API (no key required)', 'CFL fallback: TheSportsDB', 'Returns: recent games, upcoming 3, standings', 'Off-season detection built-in', 'Detects in-progress games (status="in_progress")'],
+    },
+    CT: {
+      title: 'Calendar Tool',
+      file: 'tools/calendar_events.py → apis/google_calendar.py',
+      desc: 'Reads upcoming events from Google Calendar via a service account.',
+      bullets: ['API: Google Calendar v3', 'Auth: Service account JSON (Base64 env var)', 'Returns events for the next 7 days', 'Read-only access'],
+    },
+    LMT: {
+      title: 'LoadMemoryTool (ADK built-in)',
+      file: 'google.adk.tools.load_memory_tool',
+      desc: 'ADK built-in tool that searches past agent sessions stored in Supabase pgvector for semantic recall.',
+      bullets: ['Vector similarity search (cosine)', 'Per-user memory scope isolation', 'Called by LLM on demand', 'Gracefully absent if Supabase not configured'],
+    },
+    OM: {
+      title: 'Open-Meteo',
+      file: 'apis/open_meteo.py',
+      desc: 'Free, open-source weather API. No API key required. Returns hourly and daily forecast data.',
+      bullets: ['Free with no key', 'Lat/lon based lookup', 'WMO weather code mapping included', 'Used for Grand Rapids, MI by default'],
+    },
+    GN: {
+      title: 'GNews API',
+      file: 'apis/gnews.py',
+      desc: 'News aggregation API returning top headlines filtered by category and search term.',
+      bullets: ['Requires GNEWS_API_KEY', 'Free tier: 100 requests / day', 'Supports category + keyword search', 'Returns JSON with article metadata'],
+    },
+    ESPN_: {
+      title: 'ESPN (Unofficial API)',
+      file: 'apis/espn.py',
+      desc: 'Unofficial ESPN API for scores, schedules, standings, and play-by-play. No key required.',
+      bullets: ['No API key required', 'Covers NFL (Detroit Lions)', 'Covers MLB (Toronto Blue Jays)', 'CFL coverage incomplete — TheSportsDB fallback used'],
+    },
+    TSDB_: {
+      title: 'TheSportsDB',
+      file: 'apis/thesportsdb.py',
+      desc: 'Sports data API used specifically as CFL fallback for Hamilton Tiger-Cats data.',
+      bullets: ['Used only for CFL', 'Fallback for ESPN\'s CFL gaps', 'Free tier available', 'Provides team events and records'],
+    },
+    GCAL_: {
+      title: 'Google Calendar API v3',
+      file: 'apis/google_calendar.py',
+      desc: 'Google Calendar v3 API accessed via service account credentials for private calendar data.',
+      bullets: ['Service account auth (no OAuth flow)', 'Credentials: Base64-encoded JSON', 'Requires GOOGLE_CALENDAR_ID env var', 'Read-only events listing'],
+    },
+    SB_: {
+      title: 'Supabase pgvector',
+      file: 'memory/supabase_memory_service.py → apis/supabase.py',
+      desc: 'Vector database for long-term memory. Embeds and stores agent sessions; enables semantic recall via cosine similarity search.',
+      bullets: ['Stores: session text + embedding vector', 'Search: cosine distance similarity', 'Scoped by user session ID', 'Optional — bot degrades gracefully if missing'],
+    },
+  };
+
+  // ── Show detail panel ─────────────────────────────────────────────────────
+  window.showDetail = function(nodeId) {
+    const d = DETAILS[nodeId];
+    if (!d) return;
+    document.getElementById('dp-title').textContent = d.title;
+    document.getElementById('dp-file').textContent = d.file;
+    document.getElementById('dp-desc').textContent = d.desc;
+    document.getElementById('dp-bullets').innerHTML = d.bullets.map(b => `<li>${b}</li>`).join('');
+    document.getElementById('dp-hint').style.display = 'none';
+    document.getElementById('detail-panel').classList.add('visible');
+  };
+
+  // ── Pan-zoom instances ────────────────────────────────────────────────────
+  const panZoomInstances = {};
+
+  function initPanZoom(tabId) {
+    if (panZoomInstances[tabId]) return;
+    const panel = document.getElementById('tab-' + tabId);
+    const svg = panel && panel.querySelector('svg');
+    if (!svg) return;
+    panZoomInstances[tabId] = svgPanZoom(svg, {
+      zoomEnabled: true,
+      panEnabled: true,
+      controlIconsEnabled: false,
+      fit: true,
+      center: true,
+      minZoom: 0.2,
+      maxZoom: 8,
+      zoomScaleSensitivity: 0.3,
+    });
+  }
+
+  document.querySelectorAll('.zoom-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const pz = panZoomInstances[this.dataset.tab];
+      if (!pz) return;
+      if (this.dataset.action === 'in')    pz.zoomIn();
+      else if (this.dataset.action === 'out')   pz.zoomOut();
+      else if (this.dataset.action === 'reset') { pz.resetZoom(); pz.center(); }
+    });
+  });
+
+  // ── Tab switching (lazy Mermaid render) ──────────────────────────────────
+  // Mermaid can't render inside display:none — only render when a tab first becomes visible.
+  const renderedTabs = new Set(['overview']);
+
+  document.querySelectorAll('#arch-tabs .tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const id = this.dataset.tab;
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('#arch-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+      const panel = document.getElementById('tab-' + id);
+      panel.classList.add('active');
+      this.classList.add('active');
+
+      if (!renderedTabs.has(id)) {
+        renderedTabs.add(id);
+        const diagrams = panel.querySelectorAll('pre.mermaid');
+        if (diagrams.length) {
+          mermaid.run({ nodes: diagrams }).then(() => initPanZoom(id));
+        }
+      }
+    });
+  });
+
+  // ── Accordion ─────────────────────────────────────────────────────────────
+  function toggleAccordion(btn) {
+    btn.parentElement.classList.toggle('open');
+  }
+  window.toggleAccordion = toggleAccordion;
+
+  // ── Mermaid ───────────────────────────────────────────────────────────────
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    securityLevel: 'loose',
+    themeVariables: {
+      background: '#161b22',
+      mainBkg: '#1c2128',
+      nodeBorder: '#388bfd',
+      clusterBkg: 'rgba(13,17,23,0.6)',
+      clusterBorder: '#30363d',
+      titleColor: '#e6edf3',
+      edgeLabelBackground: '#0d1117',
+      primaryColor: '#1f6feb',
+      primaryTextColor: '#e6edf3',
+      primaryBorderColor: '#388bfd',
+      lineColor: '#8b949e',
+      secondaryColor: '#21262d',
+      tertiaryColor: '#1c2128',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: '13px',
+      actorBkg: '#1c2128',
+      actorBorder: '#388bfd',
+      actorTextColor: '#e6edf3',
+      activationBkgColor: '#1f6feb',
+      noteBkgColor: '#1c2128',
+      noteTextColor: '#e6edf3',
+      signalColor: '#8b949e',
+      signalTextColor: '#e6edf3',
+      sequenceNumberColor: '#58a6ff',
+    },
+    flowchart: { curve: 'basis', padding: 20, htmlLabels: true },
+    sequence: { actorFontSize: 13, messageFontSize: 12, noteFontSize: 12 },
+  });
+
+  // Only render the initially visible tab — hidden tabs render lazily on first open
+  function renderActiveTab() {
+    const active = document.querySelector('.tab-panel.active');
+    const diagrams = active ? active.querySelectorAll('pre.mermaid') : [];
+    if (diagrams.length) {
+      mermaid.run({ nodes: diagrams }).then(() => initPanZoom('overview'));
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderActiveTab);
+  } else {
+    renderActiveTab();
+  }
+</script>
+</body>
+</html>
