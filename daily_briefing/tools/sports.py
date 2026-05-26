@@ -1,9 +1,10 @@
-﻿"""Sports tool — orchestrates ESPN and TheSportsDB data for the daily briefing."""
+"""Sports tool — orchestrates ESPN and TheSportsDB data for the daily briefing."""
 
 from __future__ import annotations
 
 import dataclasses
 import datetime
+import json
 from zoneinfo import ZoneInfo
 
 import requests
@@ -11,6 +12,7 @@ import requests
 from daily_briefing.apis.espn import (
     find_team_id as _find_team_id,
     get_division_standings as _get_division_standings,
+    get_game_plays as _get_game_plays,
     get_recent_results as _get_recent_results,
     get_team_record as _get_team_record,
     get_team_schedule as _get_team_schedule,
@@ -50,9 +52,14 @@ _DEFAULT_TEAMS: list[TrackedTeam] = [
 
 
 def get_sports_scores(teams=None) -> str:
-    """Fetch team record, recent results, next 3 upcoming games, and division
-    standings for the tracked teams (Detroit Lions, Toronto Blue Jays, Hamilton
-    Tiger-Cats).
+    """Return a JSON string with sports data for the tracked teams.
+
+    The JSON includes recent completed games, upcoming/live games (with
+    status "in_progress" or "scheduled"), division standings, and team records.
+
+    When a game is currently in progress, its entry in ``upcoming_games`` will
+    have ``"status": "in_progress"`` and current scores in the ``competitors``
+    list. Use this to answer questions about live/current scores.
 
     Tries ESPN first; falls back to TheSportsDB for leagues where ESPN has no
     current schedule data (e.g. CFL after 2023).
@@ -60,17 +67,27 @@ def get_sports_scores(teams=None) -> str:
     Call with no arguments to fetch all three default teams.
 
     Returns:
-        Formatted per-team summary.
+        JSON string with keys:
+          - as_of: current ET datetime string
+          - teams: list of per-team objects, each with:
+              league, team, record, note (null or off-season message),
+              recent_games (list), upcoming_games (list, max 3), standings (dict or null)
     """
     # Fall back to defaults if called with no args OR if the LLM passed
     # something invalid (e.g. a list of strings instead of TrackedTeam objects).
     if not teams or not all(isinstance(t, (TrackedTeam, dict)) for t in teams):
         teams = _DEFAULT_TEAMS
-    # Use Eastern Time so games played this evening aren't mislabelled
-    # "Yesterday" once UTC rolls past midnight (ET is UTC-4/5).
-    today = datetime.datetime.now(ZoneInfo("America/New_York")).date()
+
+    now_et = datetime.datetime.now(ZoneInfo("America/New_York"))
+    today = now_et.date()
     yesterday = today - datetime.timedelta(days=1)
-    sections: list[str] = []
+
+    # Format as_of string
+    hour = now_et.hour % 12 or 12
+    ampm = "AM" if now_et.hour < 12 else "PM"
+    as_of = f"{now_et.strftime('%A, %B')} {now_et.day}, {now_et.year} at {hour}:{now_et.strftime('%M')} {ampm} ET"
+
+    team_results: list[dict] = []
 
     for team_entry in teams:
         if isinstance(team_entry, dict):
@@ -79,23 +96,50 @@ def get_sports_scores(teams=None) -> str:
         sport = team_entry.sport
         league = team_entry.league
         team_name = team_entry.team_name
+
         try:
             team_id = _find_team_id(sport, league, team_name)
             if not team_id:
-                sections.append(f"**{league_label} — {team_name}**: team not found on ESPN")
+                team_results.append({
+                    "league": league_label,
+                    "team": team_name,
+                    "record": "",
+                    "note": "team not found on ESPN",
+                    "recent_games": [],
+                    "upcoming_games": [],
+                    "standings": None,
+                })
                 continue
 
             sched_events = _get_team_schedule(sport, league, team_id)
             record_str = _get_team_record(sport, league, team_id)
 
         except requests.RequestException as exc:
-            sections.append(f"**{league_label} — {team_name}**: error ({exc})")
+            team_results.append({
+                "league": league_label,
+                "team": team_name,
+                "record": "",
+                "note": f"error fetching data ({exc})",
+                "recent_games": [],
+                "upcoming_games": [],
+                "standings": None,
+            })
             continue
 
         recent_results = _get_recent_results(sport, league, team_name, today, yesterday)
-        upcoming = _get_upcoming_games(sched_events, today)
-        if not upcoming:
-            upcoming = _get_today_scoreboard_upcoming_games(sport, league, team_name, today)
+
+        # Always query the scoreboard for today — the team schedule endpoint
+        # doesn't update in real-time, so it can't detect a game in progress.
+        # The scoreboard is the authoritative source for today's live status.
+        today_games = _get_today_scoreboard_upcoming_games(sport, league, team_name, today)
+        upcoming_from_schedule = _get_upcoming_games(sched_events, today)
+        if today_games:
+            # Scoreboard covers today; use schedule only for future dates.
+            future_games = [g for g in upcoming_from_schedule if g["date"] > today.isoformat()]
+            upcoming = today_games + future_games
+        else:
+            # No game on the scoreboard today; fall back to schedule only.
+            upcoming = upcoming_from_schedule
 
         # TheSportsDB fallback when ESPN has no schedule or scoreboard data
         if not sched_events and not recent_results and not upcoming:
@@ -106,39 +150,82 @@ def get_sports_scores(teams=None) -> str:
                 record_str = _tsdb_get_team_record(tsdb_events, team_name)
 
         # Off-season: no recent games and next game is more than 30 days out
-        next_date = upcoming[0][0] if upcoming else None
+        next_date_str = upcoming[0]["date"] if upcoming else None
+        next_date = datetime.date.fromisoformat(next_date_str) if next_date_str else None
         if not recent_results and (next_date is None or (next_date - today).days > 30):
-            next_str = (
-                f"next game {next_date.strftime('%b')} {next_date.day}, {next_date.year}"
+            note = (
+                f"Off-season (next game {next_date.strftime('%b')} {next_date.day}, {next_date.year})"
                 if next_date
-                else "no games scheduled"
+                else "Off-season (no games scheduled)"
             )
-            sections.append(f"**{league_label} — {team_name}**: Off-season ({next_str})")
+            team_results.append({
+                "league": league_label,
+                "team": team_name,
+                "record": record_str,
+                "note": note,
+                "recent_games": [],
+                "upcoming_games": [],
+                "standings": None,
+            })
             continue
 
-        record_suffix = f" ({record_str})" if record_str else ""
-        lines = [f"**{league_label} — {team_name}{record_suffix}**"]
-
-        recent_results.sort(key=lambda x: x[0])
-        if recent_results:
-            lines.append("  Recent:")
-            lines.extend(f"    • {r}" for _, r in recent_results)
-        else:
-            lines.append("  Recent: No games in the last 2 days")
-
-        if upcoming:
-            lines.append("  Upcoming:")
-            lines.extend(f"    • {g}" for _, g in upcoming[:3])
-        else:
-            lines.append("  Upcoming: None scheduled")
-
+        standings_data: dict | None = None
         try:
-            standings_str = _get_division_standings(sport, league, team_id)
-            if standings_str:
-                lines.append(standings_str)
+            standings_data = _get_division_standings(sport, league, team_id)
         except requests.RequestException:
             pass  # standings are best-effort
 
-        sections.append("\n".join(lines))
+        team_results.append({
+            "league": league_label,
+            "team": team_name,
+            "record": record_str,
+            "note": None,
+            "recent_games": sorted(recent_results, key=lambda g: g["date"]),
+            "upcoming_games": upcoming[:3],
+            "standings": standings_data,
+        })
 
-    return "\n\n".join(sections) if sections else "No sports data available."
+    return json.dumps({"as_of": as_of, "teams": team_results})
+
+
+def get_game_plays(team_name: str | None = None) -> str:
+    """Get live play-by-play data for a tracked team's in-progress game.
+
+    Call this when the user asks about recent plays, what happened in a specific
+    inning, how a run scored, who is currently batting or pitching, or the
+    current count/baserunner situation.
+
+    Args:
+        team_name: Optional team name to look up (e.g. "Blue Jays", "Lions",
+                   "Toronto"). Defaults to checking all tracked teams in order
+                   and returning the first game found in progress.
+
+    Returns:
+        JSON string with keys:
+          - game: full game name
+          - status: "in_progress" or "scheduled"
+          - detail: current inning/period string (e.g. "Top 3rd")
+          - situation: balls, strikes, outs, on_first/second/third, current_at_bat text
+          - recent_plays: last 15 narrative plays (inning, text, score, scoring_play)
+          - scoring_plays: all plays where a run scored
+        Returns a JSON error object if no in-progress game is found.
+    """
+    today = datetime.datetime.now(ZoneInfo("America/New_York")).date()
+
+    teams_to_check = _DEFAULT_TEAMS
+    if team_name:
+        search = team_name.lower()
+        matches = [
+            t for t in _DEFAULT_TEAMS
+            if search in t.team_name.lower() or t.team_name.lower() in search
+        ]
+        if matches:
+            teams_to_check = matches
+
+    for team in teams_to_check:
+        result = _get_game_plays(team.sport, team.league, team.team_name, today)
+        if result and result.get("status") == "in_progress":
+            return json.dumps(result)
+
+    checked = ", ".join(t.team_name for t in teams_to_check)
+    return json.dumps({"error": f"No game currently in progress for: {checked}"})

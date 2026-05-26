@@ -186,6 +186,34 @@ documents below, update the relevant file in the same commit — do not leave do
 | Prompt / context-engineering patterns | `docs/context-engineering.md` |
 | `discord_bot.py` structure or bot behaviour | `docs/architecture/daily-briefing-design.md` |
 
+### GitHub Pages (`docs/github-pages/`)
+
+The site at `docs/github-pages/` is the public-facing documentation and deploys automatically
+on every push to `main`. **Keep it current — treat it as part of the code, not an afterthought.**
+
+| If you change… | Update these page(s)… | What to edit |
+|---|---|---|
+| Module layout or file structure | `architecture.html`, `index.html` | Module layout table in `architecture.html`; system diagram node labels if modules are renamed or added |
+| Data flow (bot, agent, tools, memory) | `architecture.html` | The relevant Mermaid diagram(s) in the tab that covers that flow; update sequence steps and participant labels |
+| Adding or removing a tool | `architecture.html`, `tools.html` | Add/remove node in the connection diagram; add/remove a tool card; update the `DETAILS` JS object for the overview diagram click handler |
+| Tool signature, inputs, or outputs | `tools.html` | The parameters/returns table inside that tool's card |
+| New or changed external API | `architecture.html`, `tools.html`, `index.html` | Connection diagram; tool card; feature card badges; `DETAILS` entry for the API node |
+| New or changed env var | `setup.html` | The environment variables table (required / optional column + description) |
+| New ADK tool design lesson or pitfall | `tools.html` | Add an accordion item to the "ADK tool design lessons" section |
+| Discord bot behaviour or session design | `architecture.html` | Conversation Flow and/or Scheduled Briefing sequence diagrams; relevant `DETAILS` entries |
+| Memory system behaviour | `architecture.html` | Memory System tab diagram; memory cards below it |
+| Setup steps (install, Docker, Supabase) | `setup.html` | The relevant step or commands table |
+| Design decision (any architectural choice) | `architecture.html` | Add or update an accordion item in the "Key decisions" section |
+
+**Diagram editing tips:**
+- All diagrams use Mermaid.js syntax inside `<pre class="mermaid">` blocks — edit the text directly.
+- The System Overview diagram in `architecture.html` has click handlers. When adding a new node,
+  also add a `click NODEID showDetail` line in the diagram AND a matching entry in the `DETAILS`
+  JS object (title, file, desc, bullets array).
+- Keep node IDs short and uppercase (e.g. `WT`, `SB_`) — they must match between the diagram
+  `click` directives and the `DETAILS` object keys.
+- Test diagrams locally by opening the HTML file in a browser before committing.
+
 ---
 
 ## Docs index
@@ -205,4 +233,11 @@ docs/
   plans/
     plan-daily-briefing-agent.md       # Original feature plan and phase breakdown
     plan-adk-k8s-deployment.md         # Phase 2: container image + Kubernetes Deployment
+  github-pages/                        # PUBLIC site — auto-deployed to GitHub Pages on push to main
+    index.html                         # Landing page: hero, system diagram, feature cards
+    architecture.html                  # Interactive diagrams: system overview (clickable nodes),
+                                       #   scheduled flow, conversation flow, memory system
+    tools.html                         # Tool-to-API connection diagram, tool cards, ADK lessons
+    setup.html                         # Step-by-step setup, env vars table, Docker/commands ref
+    css/style.css                      # Shared dark-mode stylesheet
 ```

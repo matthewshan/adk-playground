@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Setup guide for ADK Daily Briefing — environment variables, Discord bot configuration, Google Calendar service account, Supabase memory, and Docker.">
+  <title>Setup — ADK Daily Briefing</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ===== Navigation ===== -->
+<nav class="nav">
+  <div class="container nav-inner">
+    <a href="index.html" class="nav-logo">
+      <div class="logo-icon">🤖</div>
+      ADK Daily Briefing
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">Overview</a></li>
+      <li><a href="architecture.html">Architecture</a></li>
+      <li><a href="tools.html">Tools</a></li>
+      <li><a href="setup.html" class="active">Setup</a></li>
+    </ul>
+    <a href="https://github.com/matthewshan/adk-playground" class="nav-github" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<!-- ===== Main ===== -->
+<main class="container page-content">
+
+  <!-- Header -->
+  <div class="section-header">
+    <div class="section-label">Setup Guide</div>
+    <h1 style="font-size:2rem; font-weight:700; margin-bottom:0.5rem;">Getting started</h1>
+    <p style="color:var(--text-2); max-width:640px;">
+      Follow the steps below to run the Discord bot locally or via Docker. Supabase memory
+      is optional — the bot logs a warning and continues without it.
+    </p>
+  </div>
+
+  <!-- ===== Prerequisites ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Prerequisites</div>
+      <h2 class="section-title">What you need</h2>
+    </div>
+    <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+      <div class="card">
+        <div class="card-icon">🐍</div>
+        <div class="card-title">Python 3.11+</div>
+        <p class="card-desc">Required for <code>zoneinfo</code> (stdlib) and type syntax used throughout the project.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🤖</div>
+        <div class="card-title">LLM Backend</div>
+        <p class="card-desc">Either a <strong>Gemini API key</strong> from Google AI Studio, or a locally running <strong>Ollama</strong> instance. See the model notes below before choosing.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📰</div>
+        <div class="card-title">GNews API key</div>
+        <p class="card-desc">Free tier at <a href="https://gnews.io" target="_blank" rel="noopener">gnews.io</a>. Note: the free plan is <strong>localhost-only</strong> — you'll need a paid plan to run in Docker or on a server.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">💬</div>
+        <div class="card-title">Discord Bot</div>
+        <p class="card-desc">A bot application in the Discord Developer Portal with <strong>Message Content Intent</strong> enabled. See the Discord section below.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📅</div>
+        <div class="card-title">Google Calendar</div>
+        <p class="card-desc">A GCP service account with Viewer access to your calendar. The JSON key is Base64-encoded into an env var. See the Calendar section below.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🗄️</div>
+        <div class="card-title">Supabase (optional)</div>
+        <p class="card-desc">Enables long-term semantic memory. Without it, the agent still works — it just won't recall past briefings across restarts.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== Step-by-Step ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Installation</div>
+      <h2 class="section-title">Step-by-step setup</h2>
+    </div>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Clone the repository</h3>
+          <div class="code-block">
+            <pre>git clone https://github.com/matthewshan/adk-playground.git
+cd adk-playground</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Install Python dependencies</h3>
+          <div class="code-block">
+            <pre>python3 -m pip install --user -r requirements.txt</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Configure environment variables</h3>
+          <p>Copy the example env file and fill in your secrets. Never commit <code>.env</code>.</p>
+          <div class="code-block">
+            <pre>cp daily_briefing/.env.example daily_briefing/.env
+# then edit daily_briefing/.env with your values</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+          <p style="margin-top:0.625rem; font-size:0.875rem;">See the <a href="#env-vars">environment variables table</a> and per-service setup sections below for what each value should be.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Run smoke tests (optional but recommended)</h3>
+          <p>These call APIs directly without running the full agent. Missing API keys are skipped automatically — you'll see which ones pass.</p>
+          <div class="code-block">
+            <pre># All tool APIs
+python3 daily_briefing/smoke_tests/test_apis.py
+
+# Sports tool specifically (no API key required)
+python3 daily_briefing/smoke_tests/test_sports.py
+
+# Full agent run — calls the LLM and all tools, prints digest to stdout
+python3 daily_briefing/smoke_tests/test_agent.py</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <h3>Start the Discord bot</h3>
+          <p>The bot posts the daily briefing at 7 AM ET and responds to direct messages in the configured channel.</p>
+          <div class="code-block">
+            <pre>python3 -m daily_briefing.discord_bot</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+          <p style="margin-top:0.625rem; font-size:0.875rem;">On startup you should see a log line like <code>Logged in as YourBot#1234</code>. If you see a token error, double-check <code>DISCORD_BOT_TOKEN</code> in your <code>.env</code>.</p>
+          <div class="callout callout-blue mt-2">
+            <div class="callout-title">CLI debug mode (no Discord needed)</div>
+            <p>To print a briefing to stdout without a bot token, run <code>python3 -m daily_briefing.main</code>. This is the fastest way to verify the agent and tools are working.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== Environment Variables ===== -->
+  <section class="section" id="env-vars">
+    <div class="section-header">
+      <div class="section-label">Configuration</div>
+      <h2 class="section-title">Environment variables</h2>
+      <p class="section-desc">All secrets live in <code>daily_briefing/.env</code>. Copy from <code>daily_briefing/.env.example</code>.</p>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Variable</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>BACKEND</code></td>
+            <td><span class="req-no">optional</span></td>
+            <td><code>gemini</code> (default) or <code>ollama</code>. Selects the LLM backend.</td>
+          </tr>
+          <tr>
+            <td><code>GEMINI_API_KEY</code></td>
+            <td><span class="req-yes">if Gemini</span></td>
+            <td>Google AI Studio API key. Get one at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com/app/apikey</a>.</td>
+          </tr>
+          <tr>
+            <td><code>GEMINI_MODEL</code></td>
+            <td><span class="req-no">optional</span></td>
+            <td>Defaults to <code>gemini-3.1-flash-lite</code>. Recommended: <code>gemini-2.5-flash-lite</code> (1 000 RPD free tier). <strong>Do not use <code>gemma-4-*</code> models</strong> — they do not support ADK tool/function calling.</td>
+          </tr>
+          <tr>
+            <td><code>OLLAMA_API_BASE</code></td>
+            <td><span class="req-yes">if Ollama</span></td>
+            <td>Ollama server URL, e.g. <code>http://127.0.0.1:11434</code>.</td>
+          </tr>
+          <tr>
+            <td><code>OLLAMA_MODEL</code></td>
+            <td><span class="req-yes">if Ollama</span></td>
+            <td>Model tag. Recommended: <code>qwen2.5:7b</code> (~4.5 GB, excellent tool calling). <strong>Do not use <code>qwen3:8b</code></strong> — its thinking/reasoning mode produces extremely verbose output.</td>
+          </tr>
+          <tr>
+            <td><code>GNEWS_API_KEY</code></td>
+            <td><span class="req-yes">yes</span></td>
+            <td>GNews API key from <a href="https://gnews.io" target="_blank" rel="noopener">gnews.io</a>. Free tier: 100 requests/day, <strong>localhost only</strong>. A paid plan is required to run from Docker or a server.</td>
+          </tr>
+          <tr>
+            <td><code>DISCORD_BOT_TOKEN</code></td>
+            <td><span class="req-yes">yes</span></td>
+            <td>Discord bot token. Discord Developer Portal → Your App → Bot → Reset Token.</td>
+          </tr>
+          <tr>
+            <td><code>DISCORD_BOT_CHANNEL_ID</code></td>
+            <td><span class="req-yes">yes</span></td>
+            <td>ID of the Discord channel the bot listens in and posts to. Right-click the channel → Copy Channel ID (requires Developer Mode in Discord settings).</td>
+          </tr>
+          <tr>
+            <td><code>GOOGLE_CALENDAR_ID</code></td>
+            <td><span class="req-yes">yes</span></td>
+            <td>The calendar's email address, e.g. <code>yourname@gmail.com</code> or a calendar-specific address found in Google Calendar → Settings → Calendar ID.</td>
+          </tr>
+          <tr>
+            <td><code>GOOGLE_SERVICE_ACCOUNT_JSON_BASE64</code></td>
+            <td><span class="req-yes">yes</span></td>
+            <td>Base64-encoded service account JSON key file. Encode with: <code>base64 -w 0 service-account.json</code>. See the Google Calendar section below for how to obtain the JSON.</td>
+          </tr>
+          <tr>
+            <td><code>SUPABASE_URL</code></td>
+            <td><span class="req-opt">optional</span></td>
+            <td>Supabase project URL (e.g. <code>https://&lt;ref&gt;.supabase.co</code>). Enables long-term memory. Bot degrades gracefully if absent.</td>
+          </tr>
+          <tr>
+            <td><code>SUPABASE_SERVICE_ROLE_KEY</code></td>
+            <td><span class="req-opt">optional</span></td>
+            <td>Supabase <strong>service_role</strong> key (not the <code>anon</code> key). Has full DB access and bypasses row-level security — keep it in <code>.env</code> only, never commit it.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== Discord Setup ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Discord</div>
+      <h2 class="section-title">Discord bot setup</h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Create a Discord Application</h3>
+          <p>Go to <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">discord.com/developers/applications</a>, click <strong>New Application</strong>, and give it a name.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Create a Bot and copy the token</h3>
+          <p>In your application, go to <strong>Bot</strong> in the left sidebar. Click <strong>Reset Token</strong>, confirm, and copy the token. This is your <code>DISCORD_BOT_TOKEN</code>. You only see the token once — save it immediately.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Enable Message Content Intent</h3>
+          <p>Still on the <strong>Bot</strong> page, scroll down to <strong>Privileged Gateway Intents</strong> and toggle on <strong>Message Content Intent</strong>. Without this, the bot can't read what users type.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Invite the bot to your server</h3>
+          <p>Go to <strong>OAuth2 → URL Generator</strong>. Under <strong>Scopes</strong>, select <code>bot</code>. Under <strong>Bot Permissions</strong>, select: <strong>Send Messages</strong> and <strong>Read Message History</strong>. Copy the generated URL and open it in a browser to add the bot to your server.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <h3>Copy the channel ID</h3>
+          <p>In Discord settings, go to <strong>Advanced</strong> and enable <strong>Developer Mode</strong>. Then right-click the channel you want the bot to use → <strong>Copy Channel ID</strong>. This is your <code>DISCORD_BOT_CHANNEL_ID</code>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== Google Calendar Setup ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Google Calendar</div>
+      <h2 class="section-title">Google Calendar service account setup</h2>
+      <p class="section-desc">
+        The agent accesses your calendar via a GCP service account — no OAuth login required at runtime.
+        The full Terraform-based provisioning is documented in
+        <a href="https://github.com/matthewshan/cloud-infrastructure/tree/main/terraform-adk-agents" target="_blank" rel="noopener">cloud-infrastructure/terraform-adk-agents</a>.
+        The manual steps are below.
+      </p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Create a GCP project and enable the Calendar API</h3>
+          <p>Go to the <a href="https://console.cloud.google.com" target="_blank" rel="noopener">Google Cloud Console</a>, create a new project, then navigate to <strong>APIs &amp; Services → Library</strong> and enable the <strong>Google Calendar API</strong>. A billing account is required to create a project, but the Calendar API is free.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Create a service account</h3>
+          <p>Go to <strong>IAM &amp; Admin → Service Accounts</strong> → <strong>Create Service Account</strong>. Give it a name (e.g. <code>daily-briefing-agent</code>). No project-level IAM role is needed — calendar access is granted by sharing the calendar directly.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Create and download a JSON key</h3>
+          <p>Click the service account → <strong>Keys</strong> tab → <strong>Add Key → Create new key → JSON</strong>. Save the downloaded file. Then Base64-encode it:</p>
+          <div class="code-block">
+            <pre>base64 -w 0 service-account.json</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+          <p style="margin-top:0.5rem; font-size:0.875rem;">Paste the output as <code>GOOGLE_SERVICE_ACCOUNT_JSON_BASE64</code> in your <code>.env</code>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Share your calendar with the service account</h3>
+          <p>Open <a href="https://calendar.google.com" target="_blank" rel="noopener">Google Calendar</a>, click the three dots next to the calendar you want to share → <strong>Settings and sharing</strong> → <strong>Share with specific people</strong>. Add the service account email (looks like <code>daily-briefing-agent@your-project.iam.gserviceaccount.com</code>) with <strong>See all event details</strong> permission.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <h3>Set the Calendar ID in .env</h3>
+          <p>Find your calendar's ID in Google Calendar → click the calendar → <strong>Settings → Calendar ID</strong>. For your primary calendar this is usually just your Gmail address. Set it as <code>GOOGLE_CALENDAR_ID</code>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== Docker ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Docker</div>
+      <h2 class="section-title">Running with Docker</h2>
+    </div>
+
+    <h3 style="margin-bottom:0.75rem; font-size:1rem;">Discord Bot (primary — includes scheduling)</h3>
+    <div class="code-block mb-2">
+      <pre>docker build -t daily-briefing-bot -f daily_briefing/Dockerfile.bot .
+docker run --env-file daily_briefing/.env daily-briefing-bot</pre>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+
+    <h3 style="margin-bottom:0.75rem; margin-top:1.5rem; font-size:1rem;">ADK Web UI (dev / testing)</h3>
+    <div class="code-block mb-2">
+      <pre>docker build -t daily-briefing-dev -f daily_briefing/Dockerfile.dev .
+docker run --env-file daily_briefing/.env -p 8000:8000 daily-briefing-dev
+# Then open http://localhost:8000 and select "daily_briefing"</pre>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+
+    <div class="callout callout-orange mt-3">
+      <div class="callout-title">Running the ADK Web UI without Docker</div>
+      <p>Run from the repo root — ADK discovers <code>daily_briefing/</code> automatically:<br>
+      <code>adk web --host 0.0.0.0 --port 8000</code></p>
+    </div>
+
+    <div class="callout callout-orange mt-2">
+      <div class="callout-title">GNews free tier + Docker</div>
+      <p>The GNews free plan only permits requests from <code>localhost</code>. If you run the bot in Docker or on a server you'll need a paid GNews plan, or the news section of the briefing will fail.</p>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== Supabase Memory ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Optional</div>
+      <h2 class="section-title">Setting up Supabase memory</h2>
+      <p class="section-desc">Long-term memory is optional. Without it, the agent works fine but won't recall past briefings. Full details in <a href="https://github.com/matthewshan/adk-playground/blob/main/docs/integrations/supabase-vector-adk.md" target="_blank" rel="noopener">docs/integrations/supabase-vector-adk.md</a>.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Create a Supabase project</h3>
+          <p>Sign up at <a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> and create a new project. Note the <strong>Project URL</strong> and the <strong>service_role</strong> key (not the <code>anon</code> key) from <strong>Settings → API → Project API keys</strong>.</p>
+          <div class="callout callout-orange mt-2">
+            <div class="callout-title">Use the service_role key, not anon</div>
+            <p>The agent runs server-side and needs cross-session read/write access. The <code>service_role</code> key bypasses row-level security — keep it in <code>.env</code> only, never commit it.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Run the one-time schema setup</h3>
+          <p>In the Supabase <strong>SQL Editor</strong>, run the following. This creates the memory table, an HNSW index, and the similarity-search RPC function the Python client calls.</p>
+          <div class="code-block">
+            <pre>-- Enable pgvector (must run first — not auto-enabled)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Drop old objects if re-running after a dimension change
+DROP FUNCTION IF EXISTS match_agent_memory(vector, int);
+DROP TABLE IF EXISTS agent_memory;
+
+-- Memory table
+-- Embeddings use 1536 dims (gemini-embedding-001 truncated from 3072
+-- to stay within pgvector's HNSW/IVFFlat index limit of 2000)
+CREATE TABLE agent_memory (
+  id          bigserial    PRIMARY KEY,
+  session_id  text         NOT NULL,
+  content     text         NOT NULL,
+  embedding   vector(1536),
+  created_at  timestamptz  DEFAULT now()
+);
+
+-- HNSW index for approximate nearest-neighbour search
+-- (handles dynamic inserts correctly, unlike IVFFlat)
+CREATE INDEX ON agent_memory USING hnsw (embedding vector_cosine_ops);
+
+-- RPC function used by the Python memory tool for similarity search
+CREATE OR REPLACE FUNCTION match_agent_memory(
+  query_embedding vector(1536),
+  match_count     int DEFAULT 5
+)
+RETURNS TABLE (id bigint, session_id text, content text, similarity float)
+LANGUAGE sql STABLE
+AS $$
+  SELECT   id, session_id, content,
+           1 - (embedding &lt;=> query_embedding) AS similarity
+  FROM     agent_memory
+  ORDER BY embedding &lt;=> query_embedding
+  LIMIT    match_count;
+$$;</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Add Supabase keys to .env</h3>
+          <div class="code-block">
+            <pre>SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Verify with the memory smoke test</h3>
+          <div class="code-block">
+            <pre>python3 daily_briefing/smoke_tests/test_memory.py</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== All Commands ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Reference</div>
+      <h2 class="section-title">All commands</h2>
+    </div>
+
+    <h3 style="margin-bottom:0.75rem; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em; color:var(--text-3);">Running</h3>
+    <div class="table-wrapper mb-2">
+      <table>
+        <thead><tr><th>Command</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>python3 -m daily_briefing.discord_bot</code></td><td>Start the Discord bot (primary — handles scheduling + conversation)</td></tr>
+          <tr><td><code>python3 -m daily_briefing.main</code></td><td>CLI debug runner — prints digest to stdout, no Discord needed</td></tr>
+          <tr><td><code>adk web --host 0.0.0.0 --port 8000</code></td><td>ADK Web UI for interactive testing (run from repo root)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-bottom:0.75rem; margin-top:1.5rem; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em; color:var(--text-3);">Smoke Tests</h3>
+    <div class="table-wrapper mb-2">
+      <table>
+        <thead><tr><th>Command</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>python3 daily_briefing/smoke_tests/test_apis.py</code></td><td>All tool APIs — skips keyed APIs when env vars absent</td></tr>
+          <tr><td><code>python3 daily_briefing/smoke_tests/test_sports.py</code></td><td>Sports tool + unit assertions for off-season detection</td></tr>
+          <tr><td><code>python3 daily_briefing/smoke_tests/test_agent.py</code></td><td>Full agent run — calls LLM and all tools, prints digest</td></tr>
+          <tr><td><code>python3 daily_briefing/smoke_tests/test_discord_bot.py</code></td><td>Discord bot unit tests — no token required</td></tr>
+          <tr><td><code>python3 daily_briefing/smoke_tests/test_memory.py</code></td><td>Supabase pgvector smoke test — requires SUPABASE_* keys</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-bottom:0.75rem; margin-top:1.5rem; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em; color:var(--text-3);">Ollama (local backend)</h3>
+    <div class="code-block">
+      <pre># If using the workspace-local Ollama install:
+export OLLAMA_HOST=127.0.0.1:11434
+export OLLAMA_MODELS="$PWD/.ollama/models"
+./.tools/ollama/bin/ollama serve &
+# Otherwise, if Ollama is installed system-wide, just run: ollama serve &
+
+# Pull the recommended model (first time only)
+ollama pull qwen2.5:7b
+
+# Run the agent with the Ollama backend
+export BACKEND=ollama
+export OLLAMA_API_BASE=http://127.0.0.1:11434
+export OLLAMA_MODEL=qwen2.5:7b
+python3 -m daily_briefing.discord_bot</pre>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===== Footer ===== -->
+<footer class="footer">
+  <div class="container footer-inner">
+    <span class="footer-text">ADK Playground · Matthew Shan</span>
+    <div class="footer-links">
+      <a href="https://github.com/matthewshan/adk-playground" target="_blank" rel="noopener">GitHub</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="tools.html">Tools</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  function copyCode(btn) {
+    const code = btn.previousElementSibling.textContent;
+    navigator.clipboard.writeText(code.trim()).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+</script>
+</body>
+</html>
