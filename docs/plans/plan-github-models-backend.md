@@ -95,42 +95,47 @@ Existing smoke tests and the bot entry points stay untouched.
 
 ## Model selection (Copilot Pro)
 
-The maintainer has a GitHub Copilot **Pro** subscription. Pro grants 1,500
-AI credits per month (1,000 base + 500 flex; 1 credit = $0.01). Many models
-draw 0 credits on paid plans — those are the right default for an automated
-bot.
+The maintainer has a GitHub Copilot **Pro** subscription. The billing
+structure for Pro is changing on **June 1, 2026**, and implementation of
+this plan straddles that cutover (today is 2026-05-28). The model
+recommendation below holds in both eras — only the explanation differs.
 
-Tier ladder, cheapest first, sourced from
-https://docs.github.com/en/copilot/concepts/billing/copilot-requests
-(verified at plan time; GitHub adjusts this list periodically):
+**Recommended default: `gpt-4.1`.**
 
-| Model | Multiplier (paid plans) | Notes |
-|---|---|---|
-| `gpt-4.1` | **0x — free** | **Default choice.** Newer than GPT-4o, OpenAI tool-use shape, no credit draw. |
-| `gpt-5-mini` | **0x — free** | Strong fallback if `gpt-4.1` rate-limits or quality regresses on tool calls. |
-| `gpt-4o` | **0x — free** | Older OpenAI option, also free; keep as last-resort 0x fallback. |
-| `gpt-5.4-nano` | 0.25x | ~6,000 requests/month from the Pro allowance. |
-| `claude-haiku-4.5` / `gpt-5.4-mini` / `gemini-3-flash` | 0.33x | ~4,500 requests/month from the Pro allowance. |
-| `claude-sonnet-4.6` / `gemini-2.5-pro` / `gpt-5.4` | 1x | 1,500 requests/month from the Pro allowance. |
-| `claude-opus-4.6` | 3x | 500 requests/month — overkill for the briefing. |
-| `gpt-5.5` | 7.5x | ~200 requests/month — do not use as the default. |
+### Why `gpt-4.1`
 
-For the daily-briefing workload — one scheduled briefing per day plus
-ad-hoc Discord conversation — well under 1,000 requests/month even at
-the upper bound. **`gpt-4.1` is the right default**: free for any
-volume on Pro, modern enough that `instruction.md` won't need heavy
-retuning, and supports tool calling for the briefing's API tools.
+| Era | Billing for `gpt-4.1` on Copilot Pro |
+|---|---|
+| Current (through 2026-05-31) | One of the three "included models" with **unlimited chat** — does not draw against the premium-request allowance. The other two are `gpt-4o` and `gpt-5-mini`. |
+| Post-cutover (from 2026-06-01) | One of the **0x AI-credit** models — does not draw against the 1,500-credit monthly allowance (1,000 base + 500 flex; 1 credit = $0.01). The other two are still `gpt-4o` and `gpt-5-mini`. |
 
-Document the tier ladder as a short comment block above `GITHUB_MODEL`
-in `.env.example` so the choice is reversible without re-reading this
-plan.
+So `gpt-4.1` is effectively free on Pro in both eras for any volume the
+daily-briefing workload will produce (one scheduled briefing per day plus
+ad-hoc Discord conversation — easily under 1,000 requests/month). It is
+also newer than `gpt-4o`, supports tool calling, and uses the OpenAI
+chat-completions shape that the ADK `LiteLlm` wrapper already speaks well.
 
-Rate-limit reminder: 0x means no AI-credit draw, **not** unlimited
-throughput. The per-minute and per-day caps on the GitHub Models
-endpoint (`models.github.ai`) still apply, and those scale with
-subscription tier per the rate-limit table in the GitHub Models docs
-(see References below). The briefing's request volume sits well under
-the published Pro caps.
+### Fallback ladder (if `gpt-4.1` rate-limits)
+
+Rate-limit reminder: "0x AI credits" / "unlimited chat" mean no cost
+draw — they do **not** mean unbounded throughput. The per-minute and
+per-day caps on `models.github.ai` still apply and scale with the
+subscription tier. The published Pro caps comfortably cover the
+briefing's workload, but if they ever bite, fall back in this order:
+
+1. `gpt-5-mini` (included today / 0x post-cutover) — still free.
+2. `gpt-4o` (included today / 0x post-cutover) — still free.
+3. After June 1, 2026: paid-but-cheap options — `gpt-5.4-nano` at 0.25x
+   (~6,000 req/mo from the Pro credit pool), then the 0.33x tier
+   (`claude-haiku-4.5`, `gemini-3-flash`, `gpt-5.4-mini` — ~4,500
+   req/mo).
+4. Pre-June-1 alternative if the included models rate-limit: a 1x
+   premium model (e.g. `claude-sonnet-4.6`, `gemini-2.5-pro`) charged
+   against the Pro premium-request allowance.
+
+Document the fallback ladder as a short comment block above
+`GITHUB_MODEL` in `.env.example` so the next provider switch is reversible
+without re-reading this plan.
 
 ## Local dev verification
 
@@ -207,9 +212,15 @@ Sources for every "official API" / "officially supported" claim above:
    implementation time** — https://github.com/marketplace/models.
 6. **PAT creation** — https://github.com/settings/tokens (fine-grained PAT,
    scope: `Models: read`, no repository access required).
-7. **Copilot Pro usage-based billing** — 1,500 AI credits/month (1,000 base
-   + 500 flex; 1 credit = $0.01) —
+7. **Current Copilot Pro premium-request rules (in effect through
+   2026-05-31)** — confirms `gpt-4.1`, `gpt-4o`, and `gpt-5-mini` are the
+   "included models" with unlimited chat on paid plans; everything else
+   draws against the premium-request allowance with multipliers (Haiku
+   0.33x, Sonnet 1x, Opus 3x, etc.) —
+   https://docs.github.com/en/copilot/managing-copilot/monitoring-usage-and-entitlements/about-premium-requests
+8. **Upcoming Copilot Pro AI-credits billing (effective 2026-06-01)** —
+   1,500 AI credits/month (1,000 base + 500 flex; 1 credit = $0.01) —
    https://docs.github.com/en/copilot/concepts/billing/usage-based-billing-for-individuals
-8. **Per-model multipliers (which models are 0x / 0.25x / 0.33x / 1x /
-   3x / 7.5x on paid plans)** —
+9. **Post-cutover per-model multipliers (which models are 0x / 0.25x /
+   0.33x / 1x / 3x / 7.5x on paid plans from 2026-06-01)** —
    https://docs.github.com/en/copilot/concepts/billing/copilot-requests
