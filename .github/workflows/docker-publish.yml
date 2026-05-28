@@ -1,4 +1,4 @@
-name: Build and push daily-briefing image
+name: Build and push daily-briefing images
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - "daily_briefing/**"
       - "requirements.txt"
+  workflow_dispatch:
 
 jobs:
   build-and-push:
@@ -13,6 +14,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+
+    strategy:
+      matrix:
+        include:
+          - name: daily-briefing-bot
+            dockerfile: daily_briefing/Dockerfile.bot
+          - name: daily-briefing-dev
+            dockerfile: daily_briefing/Dockerfile.dev
 
     steps:
       - name: Checkout
@@ -32,16 +41,16 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/matthewshan/daily-briefing
+          images: ghcr.io/matthewshan/${{ matrix.name }}
           tags: |
             type=sha
             type=raw,value=latest
 
-      - name: Build and push
+      - name: Build and push ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: daily_briefing/Dockerfile
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -1,47 +1,16 @@
 """
 Long-running Discord bot for bidirectional conversation with the daily briefing agent.
 
-This is the single process that owns ALL agent interactions:
-
+Handles two interaction modes:
   • Scheduled briefing — fires daily at 7 AM Eastern via discord.ext.tasks.
-    Posts the morning digest directly to the configured channel.
-  • Conversational — each Discord user in the configured channel gets their own
-    independent ADK session.  Context is maintained in-memory for the lifetime
-    of the bot process.  Past sessions are persisted to Supabase for long-term
-    semantic recall via the agent's LoadMemoryTool.
+  • Conversational — each Discord user gets an independent ADK session with
+    long-term memory persisted to Supabase.
 
 Entry point:
     python -m daily_briefing.discord_bot
 
-Required environment variables:
-    DISCORD_BOT_TOKEN      — Bot token from the Discord Developer Portal
-    DISCORD_BOT_CHANNEL_ID — Channel ID the bot listens in (integer)
-
-Optional but recommended (memory persistence):
-    SUPABASE_URL               — Supabase project URL
-    SUPABASE_SERVICE_ROLE_KEY  — Service-role key for the Supabase project
-    (If absent, the bot starts without memory and logs a startup warning.)
-
-All other variables from .env.example are also required (Gemini key,
-GNews key, etc.) since the same agent runs for both scheduled and
-conversational paths.
-
-Setup (one-time, in Discord Developer Portal):
-    1. Create an application at https://discord.com/developers/applications
-    2. Add a Bot to the application and copy its token → DISCORD_BOT_TOKEN
-    3. Under Bot → Privileged Gateway Intents, enable "Message Content Intent"
-    4. Generate an invite URL with scopes: bot
-       Permissions: Send Messages, Read Message History
-    5. Invite the bot to your server
-
-Session design:
-    - Per-user: each Discord user_id maps to its own ADK session, so Alice and
-      Bob have independent conversation histories even in the same channel.
-    - Scheduled briefing uses user_id "scheduler" — isolated from per-user memory.
-    - Sessions live in RAM; they reset when the bot process restarts.
-      Long-term memory is persisted to Supabase via after_agent_callback.
-    - A per-user asyncio.Lock serialises rapid back-to-back messages from the
-      same user so the agent never processes two turns concurrently for one session.
+Setup and full configuration reference:
+    docs/analysis/discord-bot-setup.md
 """
 
 from __future__ import annotations
@@ -102,8 +71,8 @@ bot = discord.Client(intents=intents)
 # ---------------------------------------------------------------------------
 
 
-def _check_supabase_config() -> None:
-    """Log a warning if Supabase env vars are absent; bot runs without memory."""
+def _check_supabase_config() -> bool:
+    """Return True if Supabase is fully configured; log a warning and return False if not."""
     missing = [
         v for v in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY") if not os.getenv(v)
     ]
@@ -113,6 +82,8 @@ def _check_supabase_config() -> None:
             "Add them to .env to enable Supabase memory persistence.",
             ", ".join(missing),
         )
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -228,21 +199,29 @@ async def daily_briefing_task() -> None:
         "Write the morning digest."
     )
 
+    # Reset the scheduler session each day so each briefing runs with a clean
+    # context window.  Reusing the same session across days accumulates the full
+    # history of every prior briefing as LLM context, growing without bound.
+    _sessions.pop(_SCHEDULER_USER_ID, None)
+
     logger.info("Firing scheduled morning briefing")
     started = time.monotonic()
-    async with channel.typing():  # type: ignore[union-attr]
-        try:
+    try:
+        async with channel.typing():  # type: ignore[union-attr]
             response = await _run_agent(_SCHEDULER_USER_ID, prompt)
-        except Exception as exc:
-            elapsed = time.monotonic() - started
-            cause = _fmt_cause(exc)
-            logger.exception(
-                "Scheduled briefing failed after %.1fs: %s", elapsed, cause
-            )
+    except Exception as exc:
+        elapsed = time.monotonic() - started
+        cause = _fmt_cause(exc)
+        logger.exception(
+            "Scheduled briefing failed after %.1fs: %s", elapsed, cause
+        )
+        try:
             await channel.send(  # type: ignore[union-attr]
                 f"⚠️ Scheduled briefing failed: `{cause}`"
             )
-            return
+        except Exception:
+            logger.exception("Could not send error message to channel")
+        return
 
     elapsed = time.monotonic() - started
     logger.info(
@@ -356,8 +335,11 @@ def main() -> None:
         sys.exit(1)
     _channel_id = int(raw_channel)
 
-    # Warn early if Supabase is not configured — bot will still start.
-    _check_supabase_config()
+    # Only wire Supabase memory if both env vars are present.  Without them the
+    # Runner gets memory_service=None and the bot degrades gracefully: sessions
+    # still work, LoadMemoryTool is simply not available to the agent.
+    supabase_ok = _check_supabase_config()
+    memory_service = SupabaseMemoryService() if supabase_ok else None
 
     # Initialise the runner synchronously before handing control to discord.py's
     # event loop. Runner.__init__ is synchronous in ADK.
@@ -366,7 +348,7 @@ def main() -> None:
         app_name=APP_NAME,
         session_service=InMemorySessionService(),
         artifact_service=InMemoryArtifactService(),
-        memory_service=SupabaseMemoryService(),
+        memory_service=memory_service,
     )
 
     logger.info("Starting Discord bot (channel %d)…", _channel_id)

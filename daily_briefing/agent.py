@@ -6,11 +6,12 @@ from zoneinfo import ZoneInfo
 from google.adk import Agent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.lite_llm import LiteLlm
+from google.adk.tools.google_search_tool import GoogleSearchTool
 from google.adk.tools.load_memory_tool import LoadMemoryTool
 
 from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.news import get_news
-from daily_briefing.tools.sports import get_sports_scores
+from daily_briefing.tools.sports import get_game_plays, get_sports_scores
 from daily_briefing.tools.weather import get_weather
 
 _instruction = (Path(__file__).parent / "instruction.md").read_text(encoding="utf-8")
@@ -65,8 +66,10 @@ def make_agent(name: str = "daily_briefing") -> Agent:
             get_weather,
             get_news,
             get_sports_scores,
+            get_game_plays,
             get_calendar_events,
             LoadMemoryTool(),  # LLM can search past briefings on demand
+            GoogleSearchTool(bypass_multi_tools_limit=True),  # Gemini-only; no-op on Ollama
         ],
         after_agent_callback=_save_to_memory,
     )

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Tools reference for ADK Daily Briefing — weather, news, sports, calendar, and memory tools with API connection diagram.">
+  <title>Tools — ADK Daily Briefing</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ===== Navigation ===== -->
+<nav class="nav">
+  <div class="container nav-inner">
+    <a href="index.html" class="nav-logo">
+      <div class="logo-icon">🤖</div>
+      ADK Daily Briefing
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">Overview</a></li>
+      <li><a href="architecture.html">Architecture</a></li>
+      <li><a href="tools.html" class="active">Tools</a></li>
+      <li><a href="setup.html">Setup</a></li>
+    </ul>
+    <a href="https://github.com/matthewshan/adk-playground" class="nav-github" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<!-- ===== Main ===== -->
+<main class="container page-content">
+
+  <!-- Header -->
+  <div class="section-header">
+    <div class="section-label">Tools Reference</div>
+    <h1 style="font-size:2rem; font-weight:700; margin-bottom:0.5rem;">Tools &amp; APIs</h1>
+    <p style="color:var(--text-2); max-width:640px;">
+      The agent has six registered tools. Five gather live data; one provides semantic memory recall.
+      Each tool is a plain Python callable — no decorators, only primitive parameter types.
+    </p>
+  </div>
+
+  <!-- ===== Connection Diagram ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Diagram</div>
+      <h2 class="section-title">Tool → API connections</h2>
+    </div>
+    <div class="diagram-container">
+      <pre class="mermaid">
+graph LR
+    subgraph AGENT["ADK Agent"]
+        LLM["🤖 LLM"]
+    end
+
+    subgraph TOOLS["tools/"]
+        direction TB
+        WT["🌤️ get_weather()"]
+        NT["📰 get_news()"]
+        ST["🏈 get_sports_scores()"]
+        GP["🏈 get_game_plays()"]
+        CT["📅 get_calendar_events()"]
+        LMT["🧠 LoadMemoryTool"]
+    end
+
+    subgraph APIS["apis/  +  External Services"]
+        direction TB
+        OM["open_meteo.py\n→ Open-Meteo (free)"]
+        GN["gnews.py\n→ GNews API"]
+        ESPN_["espn.py\n→ ESPN (unofficial)"]
+        TSDB_["thesportsdb.py\n→ TheSportsDB"]
+        GCAL_["google_calendar.py\n→ Google Calendar v3"]
+        SB_[("supabase.py\n→ Supabase pgvector")]
+    end
+
+    LLM --> WT & NT & ST & GP & CT & LMT
+    WT --> OM
+    NT --> GN
+    ST --> ESPN_
+    ST -. "CFL fallback" .-> TSDB_
+    GP --> ESPN_
+    CT --> GCAL_
+    LMT <--> SB_
+      </pre>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== Tool Cards ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Tools</div>
+      <h2 class="section-title">Tool reference</h2>
+    </div>
+
+    <!-- Weather -->
+    <div class="card mt-2" style="margin-bottom:1rem;">
+      <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+        <span style="font-size:1.75rem;">🌤️</span>
+        <div>
+          <div class="card-title" style="margin-bottom:0;">get_weather()</div>
+          <code style="font-size:0.8rem;">tools/weather.py</code>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:0.375rem; flex-wrap:wrap;">
+          <span class="badge badge-teal">Open-Meteo</span>
+          <span class="badge badge-green">No API key</span>
+        </div>
+      </div>
+      <p class="card-desc" style="margin-bottom:1rem;">Fetches current conditions and a three-slot forecast for a given lat/lon. Defaults to Grand Rapids, MI.</p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Parameters</div>
+          <table style="font-size:0.8125rem; width:100%;">
+            <tbody>
+              <tr><td style="padding:0.25rem 0.5rem 0.25rem 0; color:var(--text-1);"><code>latitude</code></td><td style="color:var(--text-2);">float, default 42.96 (Grand Rapids)</td></tr>
+              <tr><td style="padding:0.25rem 0.5rem 0.25rem 0; color:var(--text-1);"><code>longitude</code></td><td style="color:var(--text-2);">float, default -85.67</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Returns</div>
+          <p style="font-size:0.8125rem; color:var(--text-2);">Multi-line string with current temperature, conditions, and three forecast periods (8 am / 1 pm / 6 pm).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- News -->
+    <div class="card mt-2" style="margin-bottom:1rem;">
+      <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+        <span style="font-size:1.75rem;">📰</span>
+        <div>
+          <div class="card-title" style="margin-bottom:0;">get_news()</div>
+          <code style="font-size:0.8rem;">tools/news.py</code>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:0.375rem; flex-wrap:wrap;">
+          <span class="badge badge-teal">GNews API</span>
+          <span class="badge badge-orange">GNEWS_API_KEY required</span>
+        </div>
+      </div>
+      <p class="card-desc" style="margin-bottom:1rem;">Fetches top general headlines and technology/cloud/AI focused stories using two separate GNews queries.</p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Parameters</div>
+          <p style="font-size:0.8125rem; color:var(--text-2);">None — queries are hardcoded (general top + technology category with cloud/AI terms).</p>
+        </div>
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Returns</div>
+          <p style="font-size:0.8125rem; color:var(--text-2);">Up to 3 general headlines + up to 2 cloud/AI highlights. Each includes title, source, and URL.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sports Scores -->
+    <div class="card mt-2" style="margin-bottom:1rem;">
+      <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+        <span style="font-size:1.75rem;">🏈</span>
+        <div>
+          <div class="card-title" style="margin-bottom:0;">get_sports_scores()</div>
+          <code style="font-size:0.8rem;">tools/sports.py</code>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:0.375rem; flex-wrap:wrap;">
+          <span class="badge badge-teal">ESPN</span>
+          <span class="badge badge-teal">TheSportsDB</span>
+          <span class="badge badge-green">No API key</span>
+        </div>
+      </div>
+      <p class="card-desc" style="margin-bottom:1rem;">Returns structured JSON with sports data for the three tracked teams: Detroit Lions (NFL), Toronto Blue Jays (MLB), Hamilton Tiger-Cats (CFL). ESPN is primary; TheSportsDB is the CFL fallback.</p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Parameters</div>
+          <table style="font-size:0.8125rem; width:100%;">
+            <tbody>
+              <tr><td style="padding:0.25rem 0.5rem 0.25rem 0; color:var(--text-1);"><code>teams</code></td><td style="color:var(--text-2);">optional — defaults to the 3 tracked teams. Validated defensively at runtime.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Returns</div>
+          <p style="font-size:0.8125rem; color:var(--text-2);">JSON string with per-team: <code>recent_games</code>, <code>upcoming_games</code> (includes <code>status: "in_progress"</code> for live games), <code>standings</code>, and <code>record</code>.</p>
+        </div>
+      </div>
+      <div class="callout callout-blue">
+        <div class="callout-title">Live score detection</div>
+        <p>When a game is in progress, its entry in <code>upcoming_games</code> has <code>status: "in_progress"</code> along with current scores and an inning/period/quarter detail field. The agent checks for this before deciding what to show.</p>
+      </div>
+    </div>
+
+    <!-- Game Plays -->
+    <div class="card mt-2" style="margin-bottom:1rem;">
+      <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+        <span style="font-size:1.75rem;">🎯</span>
+        <div>
+          <div class="card-title" style="margin-bottom:0;">get_game_plays()</div>
+          <code style="font-size:0.8rem;">tools/sports.py</code>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:0.375rem; flex-wrap:wrap;">
+          <span class="badge badge-teal">ESPN</span>
+          <span class="badge badge-green">No API key</span>
+        </div>
+      </div>
+      <p class="card-desc" style="margin-bottom:1rem;">Fetches detailed play-by-play data for a specific game. Called by the agent when a user asks about recent plays, current at-bat situations, or scoring plays.</p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Parameters</div>
+          <table style="font-size:0.8125rem; width:100%;">
+            <tbody>
+              <tr><td style="padding:0.25rem 0.5rem 0.25rem 0; color:var(--text-1);"><code>sport</code></td><td style="color:var(--text-2);">str — ESPN sport slug (e.g. "baseball")</td></tr>
+              <tr><td style="padding:0.25rem 0.5rem 0.25rem 0; color:var(--text-1);"><code>league</code></td><td style="color:var(--text-2);">str — ESPN league slug (e.g. "mlb")</td></tr>
+              <tr><td style="padding:0.25rem 0.5rem 0.25rem 0; color:var(--text-1);"><code>game_id</code></td><td style="color:var(--text-2);">str — ESPN game ID from scores data</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Returns</div>
+          <p style="font-size:0.8125rem; color:var(--text-2);">Last 15 at-bats/plays, scoring plays, current situation (bases, outs, count for baseball), and game state.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calendar -->
+    <div class="card mt-2" style="margin-bottom:1rem;">
+      <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+        <span style="font-size:1.75rem;">📅</span>
+        <div>
+          <div class="card-title" style="margin-bottom:0;">get_calendar_events()</div>
+          <code style="font-size:0.8rem;">tools/calendar_events.py</code>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:0.375rem; flex-wrap:wrap;">
+          <span class="badge badge-teal">Google Calendar v3</span>
+          <span class="badge badge-orange">Service account required</span>
+        </div>
+      </div>
+      <p class="card-desc" style="margin-bottom:1rem;">Reads upcoming events from Google Calendar using a service account — no OAuth login required. Accesses private calendars shared with the service account.</p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Parameters</div>
+          <table style="font-size:0.8125rem; width:100%;">
+            <tbody>
+              <tr><td style="padding:0.25rem 0.5rem 0.25rem 0; color:var(--text-1);"><code>days_ahead</code></td><td style="color:var(--text-2);">int, default 7 — how many days to look ahead</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Returns</div>
+          <p style="font-size:0.8125rem; color:var(--text-2);">Formatted list of upcoming events with title, date, time, and location. Returns "Nothing scheduled" if calendar is empty.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Memory -->
+    <div class="card mt-2" style="margin-bottom:1rem; border-color: rgba(188,140,255,0.3);">
+      <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+        <span style="font-size:1.75rem;">🧠</span>
+        <div>
+          <div class="card-title" style="margin-bottom:0;">LoadMemoryTool</div>
+          <code style="font-size:0.8rem;">google.adk.tools.load_memory_tool (ADK built-in)</code>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:0.375rem; flex-wrap:wrap;">
+          <span class="badge badge-purple">Supabase pgvector</span>
+          <span class="badge badge-purple">ADK built-in</span>
+        </div>
+      </div>
+      <p class="card-desc" style="margin-bottom:1rem;">
+        ADK's built-in memory recall tool. Performs a semantic similarity search against past agent sessions stored in Supabase. Called automatically by the LLM when it needs past context.
+      </p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">How it's wired</div>
+          <p style="font-size:0.8125rem; color:var(--text-2);">Passed as <code>LoadMemoryTool()</code> in the tools list of <code>make_agent()</code>. The ADK runner automatically connects it to the <code>SupabaseMemoryService</code> configured on the Runner.</p>
+        </div>
+        <div>
+          <div class="text-xs text-muted" style="font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:0.375rem;">Memory write path</div>
+          <p style="font-size:0.8125rem; color:var(--text-2);">After every agent run, <code>after_agent_callback</code> calls <code>add_session_to_memory()</code>, which embeds the session text and stores it in Supabase pgvector.</p>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== ADK Tool Design Lessons ===== -->
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label">Lessons Learned</div>
+      <h2 class="section-title">ADK tool design lessons</h2>
+      <p class="section-desc">Hard-won patterns from building and debugging ADK tools with Gemini and Ollama.</p>
+    </div>
+    <div class="accordion">
+
+      <div class="accordion-item open">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          <span>⚠️ Complex type annotations silently break Gemini function calling</span>
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p style="margin-bottom:0.75rem;"><strong style="color:var(--text-1);">Problem:</strong> Dataclasses, unions with <code>None</code>, and nested generics (<code>list[MyClass]</code>, <code>Optional[str]</code>) generate JSON Schema with <code>$defs</code>, <code>$ref</code>, and <code>anyOf</code> keywords. Gemini silently rejects these schemas during function calling — the tool is never invoked, producing no output and no error message.</p>
+          <p style="margin-bottom:0.75rem;"><strong style="color:var(--text-1);">Symptom:</strong> Tool output missing from the briefing even though smoke tests pass fine (smoke tests call the tool directly, bypassing the LLM schema check).</p>
+          <p style="margin-bottom:0.75rem;"><strong style="color:var(--text-1);">Fix:</strong> Use only bare primitive types in tool signatures: <code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code>. Use <code>param=None</code> (no type annotation) for optional parameters. Validate and reconstruct objects inside the function body.</p>
+          <div class="code-block mt-2">
+            <pre># ❌ Bad — generates $defs/$ref schemas Gemini can't handle
+def get_sports_scores(teams: list[TrackedTeam] | None = None) -> str: ...
+
+# ✅ Good — primitive default, validation inside
+def get_sports_scores(teams=None) -> str:
+    if not teams or not all(isinstance(t, (TrackedTeam, dict)) for t in teams):
+        teams = _DEFAULT_TEAMS
+    ...</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          <span>🤖 LLMs fill optional parameters even when they shouldn't</span>
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p style="margin-bottom:0.75rem;"><strong style="color:var(--text-1);">Problem:</strong> Even with untyped optional parameters, the model sometimes passes strings or other unexpected types instead of leaving them at their defaults. This is especially common when the parameter name resembles something the model has an opinion about.</p>
+          <p style="margin-bottom:0.75rem;"><strong style="color:var(--text-1);">Fix:</strong> Always validate incoming args at function start and fall back to safe defaults. Never trust that <code>None</code> means the parameter wasn't passed.</p>
+          <div class="code-block mt-2">
+            <pre>def get_sports_scores(teams=None) -> str:
+    # Guard: model may pass unexpected types
+    if not teams or not all(isinstance(t, (TrackedTeam, dict)) for t in teams):
+        teams = _DEFAULT_TEAMS
+    # proceed safely...</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          <span>🌡️ Gemini free-tier model comparison (May 2026)</span>
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <div class="table-wrapper mt-2">
+            <table>
+              <thead>
+                <tr><th>Model</th><th>RPM</th><th>RPD</th><th>Works with ADK tools?</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>gemini-2.5-flash</code></td><td>5–10</td><td>~20</td><td><span style="color:var(--yellow);">⚠️ Yes, hits daily limit fast</span></td></tr>
+                <tr><td><code>gemini-2.5-flash-lite</code></td><td>10–15</td><td>1000</td><td><span style="color:var(--green);">✅ Good default</span></td></tr>
+                <tr><td><code>gemini-3.1-flash-lite</code></td><td>15</td><td>500</td><td><span style="color:var(--green);">✅ Solid alternative</span></td></tr>
+                <tr><td><code>gemma-4-26b-a4b-it</code></td><td>15</td><td>1500</td><td><span style="color:var(--red);">❌ Does not support tool calling</span></td></tr>
+                <tr><td><code>gemma-4-31b-it</code></td><td>15</td><td>1500</td><td><span style="color:var(--red);">❌ Does not support tool calling</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="mt-2" style="font-size:0.875rem;">Check your actual project limits at <a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener">aistudio.google.com/rate-limit</a> — limits vary by project age and region.</p>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          <span>🦙 Ollama as a rate-limit-free local backend</span>
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p style="margin-bottom:0.75rem;">Set <code>BACKEND=ollama</code> and <code>OLLAMA_MODEL</code> to use a local model via LiteLlm. Useful for development when hitting Gemini rate limits.</p>
+          <div class="table-wrapper mt-2" style="margin-bottom:0.75rem;">
+            <table>
+              <thead>
+                <tr><th>Model</th><th>Size</th><th>Tool calling</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>qwen2.5:7b</code></td><td>~4.5 GB</td><td><span style="color:var(--green);">✅ Excellent — recommended</span></td></tr>
+                <tr><td><code>qwen3:8b</code></td><td>~5.5 GB</td><td><span style="color:var(--yellow);">⚠️ Works, verbose thinking mode on by default</span></td></tr>
+                <tr><td><code>llama3.1:8b</code></td><td>~4.7 GB</td><td><span style="color:var(--red);">❌ Poor tool use — avoid</span></td></tr>
+                <tr><td><code>qwen3.6</code></td><td>~23 GB</td><td><span style="color:var(--red);">❌ Too large for 8 GB VRAM</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="toggleAccordion(this)">
+          <span>🛡️ Surface errors in return values, not exceptions</span>
+          <span class="accordion-arrow">▾</span>
+        </button>
+        <div class="accordion-body">
+          <p style="margin-bottom:0.75rem;"><strong style="color:var(--text-1);">Pattern:</strong> Tool functions should catch all exceptions and return a descriptive error string rather than raising. If a tool raises, the agent may silently skip the section or produce a confusing hallucination.</p>
+          <div class="code-block mt-2">
+            <pre>def get_news() -> str:
+    try:
+        articles = fetch_headlines()
+        return format_articles(articles)
+    except Exception as e:
+        return f"[News unavailable: {e}]"</pre>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+          <p style="margin-top:0.75rem; font-size:0.875rem;">The system prompt instructs the agent: <em>"If a tool failed, say so briefly in that section."</em> This way, failures are visible in the briefing output rather than silent.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- ===== Footer ===== -->
+<footer class="footer">
+  <div class="container footer-inner">
+    <span class="footer-text">ADK Playground · Matthew Shan</span>
+    <div class="footer-links">
+      <a href="https://github.com/matthewshan/adk-playground" target="_blank" rel="noopener">GitHub</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="setup.html">Setup</a>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#161b22',
+      mainBkg: '#1c2128',
+      nodeBorder: '#388bfd',
+      clusterBkg: 'rgba(13,17,23,0.6)',
+      clusterBorder: '#30363d',
+      titleColor: '#e6edf3',
+      edgeLabelBackground: '#0d1117',
+      primaryColor: '#1f6feb',
+      primaryTextColor: '#e6edf3',
+      primaryBorderColor: '#388bfd',
+      lineColor: '#8b949e',
+      secondaryColor: '#21262d',
+      tertiaryColor: '#1c2128',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: '13px',
+    },
+    flowchart: { curve: 'basis', padding: 20, htmlLabels: true },
+  });
+
+  function toggleAccordion(btn) {
+    btn.parentElement.classList.toggle('open');
+  }
+
+  function copyCode(btn) {
+    const code = btn.previousElementSibling.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+</script>
+</body>
+</html>

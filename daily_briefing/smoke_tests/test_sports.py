@@ -1,7 +1,7 @@
-﻿"""Sports tool tests.
+"""Sports tool tests.
 
 Unit tests (always run):
-  SportsFormattingTests — validates formatting logic with mocked API calls.
+  SportsFormattingTests — validates data structure with mocked API calls.
 
 Smoke test (run when executed directly):
   Calls the real ESPN + TheSportsDB APIs and prints the formatted output.
@@ -10,6 +10,7 @@ Smoke test (run when executed directly):
 from __future__ import annotations
 
 import datetime
+import json
 import sys
 import traceback
 import unittest
@@ -43,7 +44,11 @@ class SportsFormattingTests(unittest.TestCase):
             {
                 "date": "2026-05-23T20:00Z",
                 "season": {"type": 1, "slug": "preseason"},
-                "status": {"type": {"completed": False, "shortDetail": "5/23 - 4:00 PM ET"}},
+                "status": {"type": {
+                    "completed": False,
+                    "state": "pre",
+                    "shortDetail": "5/23 - 4:00 PM ET",
+                }},
                 "competitions": [
                     {
                         "competitors": [
@@ -56,10 +61,42 @@ class SportsFormattingTests(unittest.TestCase):
         ]
         upcoming = _get_upcoming_games(events, today)
         self.assertEqual(len(upcoming), 1)
-        self.assertIn("Preseason", upcoming[0][1])
-        self.assertIn("4:00 PM ET", upcoming[0][1])
+        game = upcoming[0]
+        self.assertTrue(game["is_preseason"], "Expected is_preseason to be True")
+        self.assertIn("4:00 PM ET", game["detail"])
+        self.assertEqual(game["status"], "scheduled")
 
-    @patch("daily_briefing.tools.sports._get_division_standings", return_value="")
+    def test_in_progress_game_has_correct_status(self) -> None:
+        today = datetime.date(2026, 5, 23)
+        events = [
+            {
+                "date": "2026-05-23T20:00Z",
+                "season": {"type": 2, "slug": "regular-season"},
+                "status": {"type": {
+                    "completed": False,
+                    "state": "in",
+                    "shortDetail": "Bottom 7th",
+                }},
+                "competitions": [
+                    {
+                        "competitors": [
+                            {"team": {"displayName": "Toronto Blue Jays"}, "score": "3"},
+                            {"team": {"displayName": "Boston Red Sox"}, "score": "5"},
+                        ]
+                    }
+                ],
+            }
+        ]
+        upcoming = _get_upcoming_games(events, today)
+        self.assertEqual(len(upcoming), 1)
+        game = upcoming[0]
+        self.assertEqual(game["status"], "in_progress")
+        self.assertEqual(game["detail"], "Bottom 7th")
+        scores = {c["team"]: c["score"] for c in game["competitors"]}
+        self.assertEqual(scores["Toronto Blue Jays"], "3")
+        self.assertEqual(scores["Boston Red Sox"], "5")
+
+    @patch("daily_briefing.tools.sports._get_division_standings", return_value=None)
     @patch("daily_briefing.tools.sports._get_today_scoreboard_upcoming_games")
     @patch("daily_briefing.tools.sports._get_upcoming_games", return_value=[])
     @patch("daily_briefing.tools.sports._get_recent_results", return_value=[])
@@ -77,7 +114,17 @@ class SportsFormattingTests(unittest.TestCase):
         _mock_standings,
     ) -> None:
         mock_today_fallback.return_value = [
-            (datetime.date(2026, 5, 23), "May 23 @ 4:00 PM ET — Hamilton Tiger-Cats vs Toronto Argonauts (Preseason)")
+            {
+                "date": "2026-05-23",
+                "game_time_utc": "2026-05-23T20:00:00+00:00",
+                "status": "scheduled",
+                "detail": "4:00 PM ET",
+                "is_preseason": True,
+                "competitors": [
+                    {"team": "Hamilton Tiger-Cats", "score": ""},
+                    {"team": "Toronto Argonauts", "score": ""},
+                ],
+            }
         ]
         teams = [TrackedTeam("CFL", "football", "cfl", "Hamilton Tiger-Cats")]
         with patch("daily_briefing.tools.sports.datetime") as mock_dt:
@@ -89,11 +136,16 @@ class SportsFormattingTests(unittest.TestCase):
             mock_dt.date = datetime.date
             output = get_sports_scores(teams)
 
-        self.assertIn("CFL — Hamilton Tiger-Cats", output)
-        self.assertIn("Upcoming:", output)
-        self.assertIn("Preseason", output)
-        self.assertIn("4:00 PM ET", output)
-        self.assertNotIn("Off-season", output)
+        data = json.loads(output)
+        self.assertEqual(len(data["teams"]), 1)
+        team = data["teams"][0]
+        self.assertEqual(team["league"], "CFL")
+        self.assertEqual(team["team"], "Hamilton Tiger-Cats")
+        self.assertIsNone(team["note"], "Expected no off-season note")
+        self.assertEqual(len(team["upcoming_games"]), 1)
+        game = team["upcoming_games"][0]
+        self.assertTrue(game["is_preseason"])
+        self.assertIn("4:00 PM ET", game["detail"])
 
 
 def run_smoke_test() -> bool:
@@ -104,8 +156,12 @@ def run_smoke_test() -> bool:
     try:
         result = get_sports_scores(_SMOKE_TEAMS)
         print(result)
+        data = json.loads(result)
+        league_labels = {t["league"] for t in data["teams"]}
         for team in _SMOKE_TEAMS:
-            assert team.league_label in result, f"{team.league_label} section missing from output"
+            assert team.league_label in league_labels, (
+                f"{team.league_label} section missing from output"
+            )
         print(f"\n{PASS}")
         return True
     except Exception:

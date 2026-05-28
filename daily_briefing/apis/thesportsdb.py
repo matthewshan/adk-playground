@@ -60,30 +60,6 @@ def is_preseason(event: dict) -> bool:
         return False
 
 
-def format_event_line(event: dict) -> str:
-    """Format a TheSportsDB event into a display string (time shown in ET)."""
-    home = event.get("strHomeTeam", "?")
-    away = event.get("strAwayTeam", "?")
-    timestamp = event.get("strTimestamp", "")
-    date_str = "?"
-    time_str = ""
-    if timestamp:
-        try:
-            event_dt = datetime.datetime.fromisoformat(timestamp).replace(
-                tzinfo=datetime.timezone.utc
-            )
-            event_date = event_dt.date()
-            date_str = f"{event_date.strftime('%b')} {event_date.day}"
-            edt_hour = (event_dt.hour - 4) % 24
-            h12 = edt_hour % 12 or 12
-            am_pm = "PM" if edt_hour >= 12 else "AM"
-            time_str = f"{h12}:{event_dt.strftime('%M')} {am_pm} ET"
-        except (ValueError, AttributeError):
-            pass
-    preseason_suffix = " (Preseason)" if is_preseason(event) else ""
-    return f"{date_str} @ {time_str} — {home} vs {away}{preseason_suffix}"
-
-
 def get_team_record(events: list[dict], team_name: str) -> str:
     """Compute a W-L record by tallying completed events.
 
@@ -116,9 +92,14 @@ def get_team_record(events: list[dict], team_name: str) -> str:
 
 def get_recent_results(
     events: list[dict], today: datetime.date, yesterday: datetime.date
-) -> list[tuple[datetime.date, str]]:
-    """Extract completed games from TheSportsDB events for today/yesterday."""
-    results: list[tuple[datetime.date, str]] = []
+) -> list[dict]:
+    """Extract completed games from TheSportsDB events for today/yesterday.
+
+    Returns:
+        List of game dicts, each with keys:
+        date, day_label, status ("final"), detail, is_preseason, competitors.
+    """
+    results: list[dict] = []
     for e in events:
         if e.get("strStatus") not in ("FT", "AET", "PEN"):
             continue
@@ -130,21 +111,35 @@ def get_recent_results(
             continue
         home = e.get("strHomeTeam", "?")
         away = e.get("strAwayTeam", "?")
-        hs = e.get("intHomeScore") or ""
-        aws = e.get("intAwayScore") or ""
+        hs = str(e.get("intHomeScore") or "")
+        aws = str(e.get("intAwayScore") or "")
         day_label = "Today" if event_date == today else "Yesterday"
-        preseason_suffix = " (Preseason)" if is_preseason(e) else ""
-        results.append(
-            (event_date, f"{day_label}: {home} {hs} vs {away} {aws} — Final{preseason_suffix}")
-        )
+        results.append({
+            "date": event_date.isoformat(),
+            "day_label": day_label,
+            "status": "final",
+            "detail": "Final",
+            "is_preseason": is_preseason(e),
+            "competitors": [
+                {"team": home, "score": hs},
+                {"team": away, "score": aws},
+            ],
+        })
     return results
 
 
 def get_upcoming_games(
     events: list[dict], today: datetime.date
-) -> list[tuple[datetime.date, str]]:
-    """Extract not-yet-started games on or after *today*."""
-    upcoming: list[tuple[datetime.date, str]] = []
+) -> list[dict]:
+    """Extract not-yet-started games on or after *today*.
+
+    Returns:
+        List of game dicts sorted chronologically, each with keys:
+        date, game_time_utc, status ("scheduled"), detail, is_preseason, competitors.
+        TheSportsDB has no live state concept, so status is always "scheduled"
+        for non-completed games.
+    """
+    upcoming: list[dict] = []
     for e in events:
         if e.get("strPostponed", "no") == "yes":
             continue
@@ -156,6 +151,38 @@ def get_upcoming_games(
             continue
         if event_date < today:
             continue
-        upcoming.append((event_date, format_event_line(e)))
-    upcoming.sort(key=lambda x: x[0])
+
+        home = e.get("strHomeTeam", "?")
+        away = e.get("strAwayTeam", "?")
+
+        # Build a UTC timestamp string from the stored timestamp if available
+        timestamp = e.get("strTimestamp", "")
+        game_time_utc = ""
+        detail = ""
+        if timestamp:
+            try:
+                event_dt = datetime.datetime.fromisoformat(timestamp).replace(
+                    tzinfo=datetime.timezone.utc
+                )
+                game_time_utc = event_dt.isoformat()
+                # Convert to ET for the detail field
+                edt_hour = (event_dt.hour - 4) % 24
+                h12 = edt_hour % 12 or 12
+                am_pm = "PM" if edt_hour >= 12 else "AM"
+                detail = f"{h12}:{event_dt.strftime('%M')} {am_pm} ET"
+            except (ValueError, AttributeError):
+                pass
+
+        upcoming.append({
+            "date": event_date.isoformat(),
+            "game_time_utc": game_time_utc,
+            "status": "scheduled",
+            "detail": detail,
+            "is_preseason": is_preseason(e),
+            "competitors": [
+                {"team": home, "score": ""},
+                {"team": away, "score": ""},
+            ],
+        })
+    upcoming.sort(key=lambda x: x["date"])
     return upcoming
