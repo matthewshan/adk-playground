@@ -51,6 +51,7 @@ import datetime
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -117,6 +118,22 @@ def _check_supabase_config() -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _fmt_cause(exc: BaseException) -> str:
+    """One-line cause string for logs and user-facing error replies.
+
+    Discord users see this instead of a generic "check the logs" so the actual
+    failure is visible without `kubectl logs`.
+    """
+    msg = str(exc).strip().splitlines()[0] if str(exc).strip() else ""
+    return f"{type(exc).__name__}: {msg}" if msg else type(exc).__name__
+
+
+def _preview(text: str, limit: int = 120) -> str:
+    """Single-line, length-capped preview of *text* for log lines."""
+    flat = " ".join(text.split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
 def _split_message(text: str, limit: int = 2000) -> list[str]:
@@ -212,14 +229,25 @@ async def daily_briefing_task() -> None:
     )
 
     logger.info("Firing scheduled morning briefing")
+    started = time.monotonic()
     async with channel.typing():  # type: ignore[union-attr]
         try:
             response = await _run_agent(_SCHEDULER_USER_ID, prompt)
-        except Exception:
-            logger.exception("Scheduled briefing agent error")
-            await channel.send("⚠️ Scheduled briefing failed. Check the logs.")  # type: ignore[union-attr]
+        except Exception as exc:
+            elapsed = time.monotonic() - started
+            cause = _fmt_cause(exc)
+            logger.exception(
+                "Scheduled briefing failed after %.1fs: %s", elapsed, cause
+            )
+            await channel.send(  # type: ignore[union-attr]
+                f"⚠️ Scheduled briefing failed: `{cause}`"
+            )
             return
 
+    elapsed = time.monotonic() - started
+    logger.info(
+        "Scheduled briefing succeeded in %.1fs (%d chars)", elapsed, len(response)
+    )
     for chunk in _split_message(response):
         await channel.send(chunk)  # type: ignore[union-attr]
 
@@ -262,19 +290,42 @@ async def on_message(message: discord.Message) -> None:
     # Use a string key so it's compatible with the scheduler's str user_id.
     user_id = str(message.author.id)
 
+    logger.info(
+        "Inbound from user %s (%d chars): %s",
+        user_id,
+        len(prompt),
+        _preview(prompt),
+    )
+
     # Serialise concurrent messages from the same user.
     lock = _locks.setdefault(user_id, asyncio.Lock())
     async with lock:
+        started = time.monotonic()
         # Show the typing indicator while the agent works (typically 3–10 s).
         async with message.channel.typing():
             try:
                 response = await _run_agent(user_id, prompt)
-            except Exception:
-                logger.exception("Agent error for user %s", user_id)
+            except Exception as exc:
+                elapsed = time.monotonic() - started
+                cause = _fmt_cause(exc)
+                logger.exception(
+                    "Agent error for user %s after %.1fs: %s",
+                    user_id,
+                    elapsed,
+                    cause,
+                )
                 await message.channel.send(
-                    "⚠️ Something went wrong. Please try again."
+                    f"⚠️ Something went wrong: `{cause}`"
                 )
                 return
+
+        elapsed = time.monotonic() - started
+        logger.info(
+            "Agent reply to user %s in %.1fs (%d chars)",
+            user_id,
+            elapsed,
+            len(response),
+        )
 
         # Send the response in Discord-safe chunks (≤2000 chars each).
         for chunk in _split_message(response):

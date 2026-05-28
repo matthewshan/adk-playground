@@ -26,18 +26,27 @@ def get_calendar_events() -> str:
     if not sa_b64:
         return "Calendar unavailable: GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 not set."
 
-    sa_info = json.loads(base64.b64decode(sa_b64).decode("utf-8"))
+    try:
+        sa_info = json.loads(base64.b64decode(sa_b64).decode("utf-8"))
+    except (ValueError, json.JSONDecodeError) as exc:
+        return f"Calendar unavailable: bad service-account JSON: {exc}"
+
     now = datetime.datetime.now(datetime.timezone.utc)
     today = now.date()
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_window = start_of_day + datetime.timedelta(days=7)
 
-    items = fetch_events(
-        sa_info,
-        calendar_id,
-        start_of_day.isoformat(),
-        end_of_window.isoformat(),
-    )
+    try:
+        items = fetch_events(
+            sa_info,
+            calendar_id,
+            start_of_day.isoformat(),
+            end_of_window.isoformat(),
+        )
+    except Exception as exc:
+        # Google API client can raise a variety of HttpError / transport errors.
+        # Degrade gracefully so one upstream failure does not abort the briefing.
+        return f"Calendar unavailable: {type(exc).__name__}: {exc}"
     if not items:
         return "Nothing scheduled"
 

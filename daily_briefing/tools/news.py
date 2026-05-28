@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+import requests
+
 from daily_briefing.apis.gnews import fetch_top_headlines
 
 
@@ -16,8 +18,14 @@ def get_news() -> str:
     Returns:
         A bulleted string listing headline and source.
     """
-    gnews_key = os.environ["GNEWS_API_KEY"]
-    articles = fetch_top_headlines(gnews_key)
+    gnews_key = os.environ.get("GNEWS_API_KEY", "")
+    if not gnews_key:
+        return "News unavailable: GNEWS_API_KEY not set."
+
+    try:
+        articles = fetch_top_headlines(gnews_key)
+    except requests.RequestException as exc:
+        return f"News unavailable: {type(exc).__name__}: {exc}"
 
     seen: set[str] = set()
     lines: list[str] = []

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import requests
+
 from daily_briefing.apis.open_meteo import WMO_CODES, fetch_forecast
 
 _FORECAST_HOURS: dict[int, str] = {
@@ -24,7 +26,11 @@ def get_weather(
     Returns:
         Multi-line string with current conditions and three forecast periods.
     """
-    data = fetch_forecast(latitude, longitude)
+    try:
+        data = fetch_forecast(latitude, longitude)
+    except requests.RequestException as exc:
+        # Degrade gracefully — one upstream failure must not abort the whole briefing.
+        return f"Weather unavailable: {type(exc).__name__}: {exc}"
 
     current = data["current"]
     temp = round(current["temperature_2m"])
