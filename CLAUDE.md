@@ -146,11 +146,13 @@ All secrets live in `daily_briefing/.env` (never committed). Copy from
 
 | Variable | Required | Notes |
 |---|---|---|
-| `BACKEND` | no | `gemini` (default) or `ollama` |
+| `BACKEND` | no | `gemini` (default), `ollama`, or `github` |
 | `GEMINI_API_KEY` | if Gemini | Google AI Studio key |
 | `GEMINI_MODEL` | no | default `gemini-3.1-flash-lite` |
 | `OLLAMA_API_BASE` | if Ollama | e.g. `http://127.0.0.1:11434` |
 | `OLLAMA_MODEL` | if Ollama | e.g. `qwen2.5:7b` |
+| `GITHUB_API_KEY` | if GitHub | Fine-grained PAT with `Models: read` scope — https://github.com/settings/tokens |
+| `GITHUB_MODEL` | no | default `gpt-4.1`; see `daily_briefing/.env.example` for the fallback ladder |
 | `GNEWS_API_KEY` | yes | GNews free tier |
 | `DISCORD_BOT_TOKEN` | yes | Discord bot token — Developer Portal → Bot → Token |
 | `DISCORD_BOT_CHANNEL_ID` | yes | Channel ID the bot listens in |

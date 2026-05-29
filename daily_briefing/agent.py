@@ -1,27 +1,19 @@
-import os
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from google.adk import Agent
 from google.adk.agents.callback_context import CallbackContext
-from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools.google_search_tool import GoogleSearchTool
 from google.adk.tools.load_memory_tool import LoadMemoryTool
 
+from daily_briefing.models import make_model
 from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.news import get_news
 from daily_briefing.tools.sports import get_game_plays, get_sports_scores
 from daily_briefing.tools.weather import get_weather
 
 _instruction = (Path(__file__).parent / "instruction.md").read_text(encoding="utf-8")
-
-_backend = os.getenv("BACKEND", "gemini").lower()
-if _backend == "ollama":
-    _ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-    _model = LiteLlm(model=f"ollama_chat/{_ollama_model}")
-else:
-    _model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 
 def now_et() -> str:
@@ -59,7 +51,7 @@ def make_agent(name: str = "daily_briefing") -> Agent:
     """
     return Agent(
         name=name,
-        model=_model,
+        model=make_model(),
         description="Daily morning digest agent.",
         instruction=_instruction,
         tools=[

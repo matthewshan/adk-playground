@@ -190,7 +190,7 @@ python3 daily_briefing/smoke_tests/test_agent.py</pre>
           <tr>
             <td><code>BACKEND</code></td>
             <td><span class="req-no">optional</span></td>
-            <td><code>gemini</code> (default) or <code>ollama</code>. Selects the LLM backend.</td>
+            <td><code>gemini</code> (default), <code>ollama</code>, or <code>github</code>. Selects the LLM backend.</td>
           </tr>
           <tr>
             <td><code>GEMINI_API_KEY</code></td>
@@ -211,6 +211,16 @@ python3 daily_briefing/smoke_tests/test_agent.py</pre>
             <td><code>OLLAMA_MODEL</code></td>
             <td><span class="req-yes">if Ollama</span></td>
             <td>Model tag. Recommended: <code>qwen2.5:7b</code> (~4.5 GB, excellent tool calling). <strong>Do not use <code>qwen3:8b</code></strong> — its thinking/reasoning mode produces extremely verbose output.</td>
+          </tr>
+          <tr>
+            <td><code>GITHUB_API_KEY</code></td>
+            <td><span class="req-yes">if GitHub</span></td>
+            <td>Fine-grained GitHub PAT with the <code>Models: read</code> scope (no repository access required). Create at <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">github.com/settings/tokens</a>. LiteLLM reads this env var name automatically for the <code>github/*</code> provider.</td>
+          </tr>
+          <tr>
+            <td><code>GITHUB_MODEL</code></td>
+            <td><span class="req-no">optional</span></td>
+            <td>Defaults to <code>gpt-4.1</code> — 0x credit draw on Copilot Pro (free for the daily-briefing workload). Use the bare model id (e.g. <code>gpt-4.1</code>, not <code>openai/gpt-4.1</code>) — LiteLLM strips company prefixes. Full catalog: <a href="https://github.com/marketplace/models" target="_blank" rel="noopener">github.com/marketplace/models</a>.</td>
           </tr>
           <tr>
             <td><code>GNEWS_API_KEY</code></td>
