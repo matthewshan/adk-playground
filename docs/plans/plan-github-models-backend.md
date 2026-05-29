@@ -168,6 +168,30 @@ secret.
 4. No volume mounts, no init container, no token rotation: PATs rotate only
    when the user chooses to rotate them.
 
+## Other providers considered
+
+GitHub Models is the only consumer subscription of the major providers that
+also opens up its rate-limited inference API to subscribers. For context, if
+the maintainer later picks up an OpenAI or Google subscription, **neither
+gives a Copilot-style path** — they would need separate API billing:
+
+| Provider | Consumer subscription | Does it grant API access? | What the API path actually is |
+|---|---|---|---|
+| OpenAI | ChatGPT Plus / Pro / Team | **No.** Subscription covers the chat web/mobile app only. | Open an OpenAI Platform account at `platform.openai.com`, prepay credits, get an API key. LiteLLM provider prefix: `openai/<model>`. |
+| Google | Google AI Pro / Ultra (fka Gemini Advanced) | **No.** Subscription covers the Gemini chat app, NotebookLM Pro, etc. Does **not** raise Gemini API quotas. | Attach a Cloud billing account to the Google Cloud / AI Studio project that owns `GEMINI_API_KEY`. Same model strings as today, no code change — only billing flips from free tier to pay-as-you-go. |
+| GitHub | Copilot Pro / Business / Enterprise | **Yes.** Rate-limit tiers on `models.github.ai` scale with subscription level. | The path used by this plan: LiteLLM `github/<model>`. |
+
+Practical implication for the current Gemini Studio quota pain: a Google
+AI Pro subscription would not relieve it; turning on Cloud billing on the
+existing `GEMINI_API_KEY`'s project would. Likewise, ChatGPT Plus would
+not give the bot any OpenAI API access — only a paid OpenAI Platform
+account would.
+
+If either of those gets set up later, both can slot into `models.py`
+alongside the GitHub branch with one new `_provider()` helper each — the
+module structure introduced by this plan makes that addition a 5-line
+change, not a refactor.
+
 ## Caveats
 
 - **Rate limits, not infinite usage.** GitHub Models still rate-limits per
