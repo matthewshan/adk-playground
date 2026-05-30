@@ -8,6 +8,12 @@ from google.adk.tools.google_search_tool import GoogleSearchTool
 from google.adk.tools.load_memory_tool import LoadMemoryTool
 
 from daily_briefing.context_trim import make_trimmer
+from daily_briefing.logging_callbacks import (
+    log_after_model,
+    log_after_tool,
+    log_before_model,
+    log_before_tool,
+)
 from daily_briefing.models import make_model, request_token_limit, supports_google_search
 from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.news import get_news
@@ -68,8 +74,12 @@ def make_agent(name: str = "daily_briefing") -> Agent:
 
     # On backends with a hard request-size cap (GitHub Models), keep each
     # request under the limit by trimming session history before it's sent.
+    # Trimmer runs first so logging sees the request the LLM actually receives.
     limit = request_token_limit()
-    before_model_callback = make_trimmer(limit) if limit else None
+    before_model_callback: list = []
+    if limit:
+        before_model_callback.append(make_trimmer(limit))
+    before_model_callback.append(log_before_model)
 
     return Agent(
         name=name,
@@ -78,6 +88,9 @@ def make_agent(name: str = "daily_briefing") -> Agent:
         instruction=_instruction,
         tools=tools,
         before_model_callback=before_model_callback,
+        after_model_callback=log_after_model,
+        before_tool_callback=log_before_tool,
+        after_tool_callback=log_after_tool,
         after_agent_callback=_save_to_memory,
     )
 

@@ -19,56 +19,71 @@ A Python / Google ADK playground for experimenting with AI agents.
 
 ## Common commands
 
+A `Taskfile.yml` is present at the repo root. `task` is installed at
+`~/.local/bin/task` on this machine (installed via the official install script).
+Use task shortcuts below — they handle venv activation automatically.
+
 ### Install dependencies
 ```bash
-python3 -m pip install --user -r requirements.txt
+task install        # creates .venv and pip-installs requirements.txt
 ```
+
+Equivalent manual steps (if `task` is unavailable):
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+> **Note:** The system Python on this machine has no `pip`. Always use a venv.
 
 ### Run the Discord bot (primary — handles both scheduled briefing and conversation)
 ```bash
+task bot
+```
+
+Raw equivalent:
+```bash
 # Copy and fill in the env file first
 cp daily_briefing/.env.example daily_briefing/.env
-
 # Requires DISCORD_BOT_TOKEN and DISCORD_BOT_CHANNEL_ID in daily_briefing/.env.
-# Fires the morning digest automatically at 7 AM ET via discord.ext.tasks.
-# See daily_briefing/.env.example for full setup instructions.
-python3 -m daily_briefing.discord_bot
+.venv/bin/python3 -m daily_briefing.discord_bot
 ```
 
 ### Run the CLI debug runner (prints digest to stdout — no Discord required)
 ```bash
-python3 -m daily_briefing.main
+task run
 ```
 
 ### Smoke tests (no agent, just tool calls)
 ```bash
-# All tools (skips keyed APIs when env vars are absent)
-python3 daily_briefing/smoke_tests/test_apis.py
+task test           # runs all smoke tests sequentially
+task test:bot       # Discord bot unit tests only — no token required
+```
 
-# Sports-focused checks + unit assertions
-python3 daily_briefing/smoke_tests/test_sports.py
-
-# Full agent run — prints digest to stdout
-python3 daily_briefing/smoke_tests/test_agent.py
-
-# Discord bot unit tests — no token required
-python3 daily_briefing/smoke_tests/test_discord_bot.py
-
+Raw equivalents:
+```bash
+.venv/bin/python3 daily_briefing/smoke_tests/test_apis.py
+.venv/bin/python3 daily_briefing/smoke_tests/test_sports.py
+.venv/bin/python3 daily_briefing/smoke_tests/test_agent.py
+.venv/bin/python3 daily_briefing/smoke_tests/test_discord_bot.py
 # Supabase memory smoke test — requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + GEMINI_API_KEY
-python3 daily_briefing/smoke_tests/test_memory.py
+.venv/bin/python3 daily_briefing/smoke_tests/test_memory.py
 ```
 
 ### ADK web UI (dev/testing)
 ```bash
-# Option A — run directly without Docker (fastest)
+task web            # starts ADK web UI on port 8000
+```
+
+Raw equivalent:
+```bash
 # Run from the repo root — ADK discovers daily_briefing/ automatically
-adk web --host 0.0.0.0 --port 8000
+.venv/bin/adk web --host 0.0.0.0 --port 8000
 # Then open http://localhost:8000 and select "daily_briefing"
 
-# Option B — run in Docker
+# Or via Docker:
 docker build -t daily-briefing-dev -f daily_briefing/Dockerfile.dev .
 docker run --env-file daily_briefing/.env -p 8000:8000 daily-briefing-dev
-# Then open http://localhost:8000
 ```
 
 ### Docker
@@ -163,6 +178,7 @@ each value, what it's for, limits, and gotchas**, see the
 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | yes | Base64-encoded service account JSON |
 | `SUPABASE_URL` | optional | Supabase project URL — enables long-term memory |
 | `SUPABASE_SERVICE_ROLE_KEY` | optional | Service-role key — bot warns and degrades if absent |
+| `LOG_LEVEL` | no | Default `INFO`. Agent callbacks (`daily_briefing/logging_callbacks.py`) log one compact line per prompt, response, and tool call — DEBUG just adds stdlib chatter |
 
 ---
 
