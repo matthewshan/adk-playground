@@ -51,20 +51,26 @@ _DEFAULT_TEAMS: list[TrackedTeam] = [
 ]
 
 
-def get_sports_scores(teams=None) -> str:
-    """Return a JSON string with sports data for the tracked teams.
+def get_sports_scores(teams: list[dict] | None = None) -> str:
+    """Return a JSON string with sports data for the given teams.
 
-    The JSON includes recent completed games, upcoming/live games (with
-    status "in_progress" or "scheduled"), division standings, and team records.
-
-    When a game is currently in progress, its entry in ``upcoming_games`` will
-    have ``"status": "in_progress"`` and current scores in the ``competitors``
-    list. Use this to answer questions about live/current scores.
+    Includes recent completed games, upcoming/live games, division standings,
+    and team records. A game currently being played appears in ``upcoming_games``
+    with ``"status": "in_progress"`` and live scores in ``competitors`` — use
+    that to answer live/current-score questions.
 
     Tries ESPN first; falls back to TheSportsDB for leagues where ESPN has no
     current schedule data (e.g. CFL after 2023).
 
-    Call with no arguments to fetch all three default teams.
+    Args:
+        teams: Optional list of team objects. Omit to fetch the three default
+            tracked teams (Detroit Lions, Toronto Blue Jays, Hamilton
+            Tiger-Cats). To look up ANY other team (e.g. the user asks about
+            the Chicago Cubs), pass a list of objects with keys:
+              - league_label: display label, e.g. "MLB"
+              - sport: ESPN sport slug — "baseball", "football", "basketball", "hockey"
+              - league: ESPN league slug — "mlb", "nfl", "nba", "nhl", "cfl"
+              - team_name: full team name, e.g. "Chicago Cubs"
 
     Returns:
         JSON string with keys:

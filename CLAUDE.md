@@ -142,7 +142,9 @@ adk-playground/
 ## Environment variables
 
 All secrets live in `daily_briefing/.env` (never committed). Copy from
-`daily_briefing/.env.example`.
+`daily_briefing/.env.example`. The table below is a quick index — for **how to obtain
+each value, what it's for, limits, and gotchas**, see the
+[Environment & Credentials Guide](docs/analysis/api-setup-guide.md).
 
 | Variable | Required | Notes |
 |---|---|---|
@@ -154,6 +156,7 @@ All secrets live in `daily_briefing/.env` (never committed). Copy from
 | `GITHUB_API_KEY` | if GitHub | Fine-grained PAT with `Models: read` scope — https://github.com/settings/tokens |
 | `GITHUB_MODEL` | no | default `gpt-4.1`; see `daily_briefing/.env.example` for the fallback ladder |
 | `GNEWS_API_KEY` | yes | GNews free tier |
+| `TAVILY_API_KEY` | if non-Gemini | Tavily web search (https://tavily.com); needed on `ollama`/`github` backends — Gemini uses native `google_search` |
 | `DISCORD_BOT_TOKEN` | yes | Discord bot token — Developer Portal → Bot → Token |
 | `DISCORD_BOT_CHANNEL_ID` | yes | Channel ID the bot listens in |
 | `GOOGLE_CALENDAR_ID` | yes | Calendar email address |
@@ -172,6 +175,7 @@ All secrets live in `daily_briefing/.env` (never committed). Copy from
 - `load_dotenv()` is called in `main.py`; access secrets via `os.getenv()`
 - Do **not** commit `.env`; use `.env.example` as the template
 - Keep `instruction.md` as the only place the system prompt lives
+- **Terse comments/docstrings** — one short line on *why*, not multi-line narration (LLM code-gen, Opus especially, tends to over-comment)
 
 ---
 
@@ -179,11 +183,15 @@ All secrets live in `daily_briefing/.env` (never committed). Copy from
 
 **Keep docs in sync with the code.** When making a change that affects any of the
 documents below, update the relevant file in the same commit — do not leave docs stale.
+**This includes `CLAUDE.md` itself:** whenever you add/remove/rename a module, command,
+env var, doc, or convention, update the matching section here in the same change so this
+file never drifts from the codebase.
 
 | If you change… | Update… |
 |---|---|
 | Module layout, APIs, or design decisions | `docs/architecture/daily-briefing-design.md` |
-| New API keys or env vars | `daily_briefing/.env.example` and `docs/analysis/api-setup-guide.md` |
+| Add, remove, or rename an env var | **All three:** `daily_briefing/.env.example`, the [Environment & Credentials Guide](docs/analysis/api-setup-guide.md) (`docs/analysis/api-setup-guide.md`), and the env-var table in this `CLAUDE.md` |
+| Add or change an LLM backend / provider | `daily_briefing/models.py`, the credentials guide (backend + key sections), and `.env.example` |
 | Deployment or infrastructure | `docs/plans/plan-adk-k8s-deployment.md` |
 | Prompt / context-engineering patterns | `docs/context-engineering.md` |
 | `discord_bot.py` structure or bot behaviour | `docs/architecture/daily-briefing-design.md` |

@@ -12,6 +12,7 @@ from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.news import get_news
 from daily_briefing.tools.sports import get_game_plays, get_sports_scores
 from daily_briefing.tools.weather import get_weather
+from daily_briefing.tools.web_search import web_search
 
 _instruction = (Path(__file__).parent / "instruction.md").read_text(encoding="utf-8")
 
@@ -58,8 +59,11 @@ def make_agent(name: str = "daily_briefing") -> Agent:
         LoadMemoryTool(),  # search past briefings on demand
     ]
     # google_search is native-Gemini-only; ADK raises for LiteLLM backends.
+    # Non-Gemini backends get the portable Tavily-backed web_search instead.
     if supports_google_search():
         tools.append(GoogleSearchTool(bypass_multi_tools_limit=True))
+    else:
+        tools.append(web_search)
 
     return Agent(
         name=name,
