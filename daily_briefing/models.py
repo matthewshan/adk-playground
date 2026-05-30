@@ -24,6 +24,11 @@ def make_model():
     return _gemini()
 
 
+def supports_google_search() -> bool:
+    """True only on Gemini; google_search is a native-Gemini tool (ADK raises otherwise)."""
+    return os.getenv("BACKEND", "gemini").lower() == "gemini"
+
+
 def _gemini():
     return os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 

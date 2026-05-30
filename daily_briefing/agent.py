@@ -7,7 +7,7 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.tools.google_search_tool import GoogleSearchTool
 from google.adk.tools.load_memory_tool import LoadMemoryTool
 
-from daily_briefing.models import make_model
+from daily_briefing.models import make_model, supports_google_search
 from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.news import get_news
 from daily_briefing.tools.sports import get_game_plays, get_sports_scores
@@ -49,20 +49,24 @@ def make_agent(name: str = "daily_briefing") -> Agent:
     Args:
         name: ADK agent name; override to isolate test sessions from production.
     """
+    tools = [
+        get_weather,
+        get_news,
+        get_sports_scores,
+        get_game_plays,
+        get_calendar_events,
+        LoadMemoryTool(),  # search past briefings on demand
+    ]
+    # google_search is native-Gemini-only; ADK raises for LiteLLM backends.
+    if supports_google_search():
+        tools.append(GoogleSearchTool(bypass_multi_tools_limit=True))
+
     return Agent(
         name=name,
         model=make_model(),
         description="Daily morning digest agent.",
         instruction=_instruction,
-        tools=[
-            get_weather,
-            get_news,
-            get_sports_scores,
-            get_game_plays,
-            get_calendar_events,
-            LoadMemoryTool(),  # LLM can search past briefings on demand
-            GoogleSearchTool(bypass_multi_tools_limit=True),  # Gemini-only; no-op on Ollama
-        ],
+        tools=tools,
         after_agent_callback=_save_to_memory,
     )
 
