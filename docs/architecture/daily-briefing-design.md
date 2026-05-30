@@ -3,9 +3,10 @@
 ## Overview
 
 A daily morning digest agent built on **Google ADK** with a configurable
-**Gemini** or **Ollama** backend. On each run it gathers weather, news, sports, and
-calendar data through tool wrappers over raw API clients, asks the model to write a
-friendly summary, and posts the result to the Discord channel.
+**Gemini**, **Ollama**, or **GitHub Models** backend. On each run it gathers
+weather, news, sports, and calendar data through tool wrappers over raw API
+clients, asks the model to write a friendly summary, and posts the result to
+the Discord channel.
 
 Intended deployment: a **long-running Kubernetes Deployment** running `discord_bot.py`,
 which fires the morning briefing at 7 AM ET via `discord.ext.tasks` and handles
@@ -22,6 +23,7 @@ daily_briefing/
   Dockerfile.bot        # container image for the long-running Discord bot
   Dockerfile.dev        # dev image — runs ADK web UI on port 8000 (adk web)
   agent.py              # ADK Agent — wires model + tools; make_agent(), now_et(), _save_to_memory
+  models.py             # backend selection — make_model() returns the model arg for Agent()
   instruction.md        # system prompt (edit without touching code)
   main.py               # CLI debug runner — prints digest to stdout (not used in production)
   discord_bot.py        # long-running Discord bot: scheduled briefing + conversational messages
@@ -170,7 +172,7 @@ follow the same pattern.
 - **Supabase long-term memory via pgvector**: `SupabaseMemoryService` (implementing ADK's `BaseMemoryService`) embeds agent output turns and stores them in Supabase. The agent exposes `LoadMemoryTool()` for on-demand semantic recall. If Supabase env vars are absent, the bot logs a startup warning and continues without memory.
 - **Per-user memory isolation**: each Discord user_id maps to a distinct `app_name/user_id` scope in Supabase. The scheduled briefing uses `user_id="scheduler"` — isolated from per-user scopes.
 - **Split raw clients from tool logic**: `apis/*.py` owns HTTP calls; `tools/*.py` owns formatting, orchestration, and ADK-facing function signatures.
-- **Configurable model backend**: `BACKEND=gemini` uses `GEMINI_MODEL`; `BACKEND=ollama` wraps the local model through `LiteLlm`.
+- **Configurable model backend**: `BACKEND=gemini` uses `GEMINI_MODEL` directly; `BACKEND=ollama` and `BACKEND=github` both wrap the model through `LiteLlm` (Ollama via `ollama_chat/<model>`, GitHub Models via `github/<model>` against GitHub's official OpenAI-compatible inference endpoint). Selection lives in `daily_briefing/models.py` — one helper per provider, so adding a fourth backend is a small additive change rather than another inline branch in `agent.py`.
 - **ESPN-first sports with fallback**: the sports tool uses ESPN when available and falls back to TheSportsDB for current CFL events.
 - **Runnable smoke tests live beside the app**: `daily_briefing/smoke_tests/` contains live tool tests, a local agent runner, and a Supabase memory smoke test.
 - **Plain Python callables**: ADK picks up tools automatically — no decorators or schemas needed.

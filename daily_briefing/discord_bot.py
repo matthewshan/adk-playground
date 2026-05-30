@@ -151,11 +151,17 @@ async def _get_or_create_session(user_id: str) -> str:
 
 
 async def _run_agent(user_id: str, prompt: str) -> str:
-    """Send *prompt* through the ADK agent for *user_id*'s session.
+    """Send *prompt* through the agent; return only the final response text.
 
-    Collects all text parts from every event and returns them joined.
+    Filters to ``is_final_response()`` so intermediate events (tool-call
+    narration, partial chunks) aren't posted as extra Discord messages.
     """
     assert _runner is not None, "runner not initialised"
+
+    # Clear any prior memory-failure marker so it reflects only this turn.
+    mem = getattr(_runner, "memory_service", None)
+    if mem is not None:
+        mem.last_search_error = None
 
     session_id = await _get_or_create_session(user_id)
     message = types.Content(
@@ -169,6 +175,8 @@ async def _run_agent(user_id: str, prompt: str) -> str:
         session_id=session_id,
         new_message=message,
     ):
+        if not event.is_final_response():
+            continue
         if not event.content or not event.content.parts:
             continue
         for part in event.content.parts:
@@ -309,6 +317,15 @@ async def on_message(message: discord.Message) -> None:
         # Send the response in Discord-safe chunks (≤2000 chars each).
         for chunk in _split_message(response):
             await message.channel.send(chunk)
+
+        # Heads-up if memory failed this turn (full trace logged at ERROR).
+        mem = getattr(_runner, "memory_service", None)
+        mem_err = getattr(mem, "last_search_error", None) if mem is not None else None
+        if mem_err:
+            await message.channel.send(
+                f"⚠️ Long-term memory was unavailable this turn, so I answered "
+                f"without it. (`{mem_err}`)"
+            )
 
 
 # ---------------------------------------------------------------------------

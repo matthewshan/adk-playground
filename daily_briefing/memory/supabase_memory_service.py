@@ -19,6 +19,7 @@ Memory is scoped per ``app_name/user_id`` using the existing ``session_id`` colu
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from typing import TYPE_CHECKING
 
@@ -29,6 +30,8 @@ from google.genai.types import EmbedContentConfig
 from typing_extensions import override
 
 from daily_briefing.apis.supabase import insert_memory, similarity_search
+
+logger = logging.getLogger(__name__)
 
 # gemini-embedding-001 natively outputs 3072 dims, but pgvector's IVFFlat/HNSW
 # indexes cap at 2000.  We truncate to 1536 (still excellent quality).
@@ -64,6 +67,11 @@ class SupabaseMemoryService(BaseMemoryService):
     search_memory         — embeds the query and returns kNN results.
     """
 
+    def __init__(self) -> None:
+        super().__init__()
+        # One-line cause when the last search_memory failed; bot reads/clears it.
+        self.last_search_error: str | None = None
+
     @override
     async def add_session_to_memory(self, session: "Session") -> None:
         """Embed and persist agent text turns from a completed session."""
@@ -95,11 +103,26 @@ class SupabaseMemoryService(BaseMemoryService):
     async def search_memory(
         self, *, app_name: str, user_id: str, query: str
     ) -> SearchMemoryResponse:
-        """Semantic search over past sessions for this app/user."""
+        """Semantic search over past sessions for this app/user.
+
+        Best-effort: on embedding/DB failure, log + record the cause and return
+        no results so the turn doesn't crash.
+        """
         scope = _user_scope(app_name, user_id)
-        # Both calls are synchronous (blocking HTTP) — offload to thread pool.
-        embedding = await asyncio.to_thread(_embed, query)
-        rows = await asyncio.to_thread(similarity_search, embedding=embedding, session_id=scope, limit=5)
+        try:
+            # Both calls are synchronous (blocking HTTP) — offload to thread pool.
+            embedding = await asyncio.to_thread(_embed, query)
+            rows = await asyncio.to_thread(similarity_search, embedding=embedding, session_id=scope, limit=5)
+        except Exception as exc:
+            cause = str(exc).strip().splitlines()[0] if str(exc).strip() else ""
+            self.last_search_error = f"{type(exc).__name__}: {cause}" if cause else type(exc).__name__
+            logger.error(
+                "search_memory failed for %s; answering without memory: %s",
+                scope,
+                self.last_search_error,
+                exc_info=True,
+            )
+            return SearchMemoryResponse(memories=[])
 
         memories = [
             MemoryEntry(

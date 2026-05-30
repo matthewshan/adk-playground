@@ -1,27 +1,20 @@
-import os
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from google.adk import Agent
 from google.adk.agents.callback_context import CallbackContext
-from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools.google_search_tool import GoogleSearchTool
 from google.adk.tools.load_memory_tool import LoadMemoryTool
 
+from daily_briefing.models import make_model, supports_google_search
 from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.news import get_news
 from daily_briefing.tools.sports import get_game_plays, get_sports_scores
 from daily_briefing.tools.weather import get_weather
+from daily_briefing.tools.web_search import web_search
 
 _instruction = (Path(__file__).parent / "instruction.md").read_text(encoding="utf-8")
-
-_backend = os.getenv("BACKEND", "gemini").lower()
-if _backend == "ollama":
-    _ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-    _model = LiteLlm(model=f"ollama_chat/{_ollama_model}")
-else:
-    _model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 
 def now_et() -> str:
@@ -57,20 +50,27 @@ def make_agent(name: str = "daily_briefing") -> Agent:
     Args:
         name: ADK agent name; override to isolate test sessions from production.
     """
+    tools = [
+        get_weather,
+        get_news,
+        get_sports_scores,
+        get_game_plays,
+        get_calendar_events,
+        LoadMemoryTool(),  # search past briefings on demand
+    ]
+    # google_search is native-Gemini-only; ADK raises for LiteLLM backends.
+    # Non-Gemini backends get the portable Tavily-backed web_search instead.
+    if supports_google_search():
+        tools.append(GoogleSearchTool(bypass_multi_tools_limit=True))
+    else:
+        tools.append(web_search)
+
     return Agent(
         name=name,
-        model=_model,
+        model=make_model(),
         description="Daily morning digest agent.",
         instruction=_instruction,
-        tools=[
-            get_weather,
-            get_news,
-            get_sports_scores,
-            get_game_plays,
-            get_calendar_events,
-            LoadMemoryTool(),  # LLM can search past briefings on demand
-            GoogleSearchTool(bypass_multi_tools_limit=True),  # Gemini-only; no-op on Ollama
-        ],
+        tools=tools,
         after_agent_callback=_save_to_memory,
     )
 
