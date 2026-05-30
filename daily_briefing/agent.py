@@ -7,7 +7,8 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.tools.google_search_tool import GoogleSearchTool
 from google.adk.tools.load_memory_tool import LoadMemoryTool
 
-from daily_briefing.models import make_model, supports_google_search
+from daily_briefing.context_trim import make_trimmer
+from daily_briefing.models import make_model, request_token_limit, supports_google_search
 from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.news import get_news
 from daily_briefing.tools.sports import get_game_plays, get_sports_scores
@@ -65,12 +66,18 @@ def make_agent(name: str = "daily_briefing") -> Agent:
     else:
         tools.append(web_search)
 
+    # On backends with a hard request-size cap (GitHub Models), keep each
+    # request under the limit by trimming session history before it's sent.
+    limit = request_token_limit()
+    before_model_callback = make_trimmer(limit) if limit else None
+
     return Agent(
         name=name,
         model=make_model(),
         description="Daily morning digest agent.",
         instruction=_instruction,
         tools=tools,
+        before_model_callback=before_model_callback,
         after_agent_callback=_save_to_memory,
     )
 
