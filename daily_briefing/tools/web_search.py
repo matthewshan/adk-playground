@@ -17,6 +17,7 @@ _MAX_RESULTS = 3
 _MAX_CONTENT_CHARS = 300
 
 
+
 def web_search(query: str) -> str:
     """Search the web for recent or ad-hoc info outside weather/news/sports/calendar.
 
