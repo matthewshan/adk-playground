@@ -9,6 +9,7 @@ Run:
 """
 
 import asyncio
+import logging
 import sys
 from pathlib import Path
 
@@ -27,13 +28,17 @@ from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types  # noqa: E402
 
 from daily_briefing.agent import now_et, root_agent  # noqa: E402
+from daily_briefing.log_config import configure_logging  # noqa: E402
 from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService  # noqa: E402
 
 APP_NAME = "daily_briefing"
 USER_ID = "scheduler"
 
+logger = logging.getLogger(__name__)
+
 
 async def run() -> None:
+    configure_logging()
     runner = Runner(
         agent=root_agent,
         app_name=APP_NAME,
@@ -67,7 +72,7 @@ async def run() -> None:
         if event.content:
             for part in event.content.parts or []:
                 if part.text:
-                    print(part.text)
+                    logger.info("%s", part.text)
 
 
 if __name__ == "__main__":

@@ -29,6 +29,21 @@ def supports_google_search() -> bool:
     return os.getenv("BACKEND", "gemini").lower() == "gemini"
 
 
+# GitHub Models' free tier rejects request bodies larger than this for gpt-4.1.
+_GITHUB_MODELS_TOKEN_LIMIT = 8000
+
+
+def request_token_limit() -> int | None:
+    """Per-request token cap for the active backend, or None if effectively unbounded.
+
+    GitHub Models' free tier caps gpt-4.1 request bodies at 8000 tokens; Gemini
+    and local Ollama have ample context, so they return None (no trimming).
+    """
+    if os.getenv("BACKEND", "gemini").lower() == "github":
+        return _GITHUB_MODELS_TOKEN_LIMIT
+    return None
+
+
 def _gemini():
     return os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
