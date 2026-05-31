@@ -83,3 +83,32 @@ Python types, the model will guess the shape incorrectly and the tool will fail.
 **Why it matters for bigger models too:** GPT-4 / Gemini are better at
 guessing shapes but still fail on nested custom types. This rule holds
 regardless of model size.
+
+---
+
+## Request-size caps (hosted backends)
+
+Some backends reject the request itself, not just produce worse output.
+**GitHub Models' free tier caps the gpt-4.1 request body at 8000 input tokens**
+(system instruction + tool schemas + the full session `contents`). The bot
+re-sends the whole conversation every turn, and large tool results (web-search
+snippets, sports JSON) accumulate in history — so even a tiny query like
+"what's the weather" can fail once earlier results have piled up.
+
+**Rules:**
+
+- **Know each backend's cap.** `models.request_token_limit()` returns the active
+  backend's limit (8000 for `BACKEND=github`, `None` for Gemini/Ollama).
+- **Trim per request, not just per session.** `context_trim.make_trimmer()` is
+  wired as the agent's `before_model_callback` only on capped backends. It
+  truncates any oversized part and drops the oldest turns until `contents` fit a
+  budget (`limit − 3500` reserve), always keeping the most recent turn. It's
+  best-effort (wrapped in try/except) so it can never break a turn.
+- **Bound tool output at the source too.** A tool that can return a lot (e.g.
+  `web_search` → Tavily) should cap its own result — `web_search` returns at
+  most 3 results with 300-char snippets.
+
+**Limitation:** the one-shot morning digest fetches weather + news + sports +
+search in a single turn, so its combined tool results can still exceed 8000 on
+`BACKEND=github` — trimming can't help (all the data is in the current turn).
+Run the scheduled briefing on Gemini.

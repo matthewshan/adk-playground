@@ -1,0 +1,53 @@
+version: '3'
+
+vars:
+  VENV: .venv
+  PYTHON: '{{.VENV}}/bin/python3'
+  PIP: '{{.VENV}}/bin/pip'
+
+tasks:
+  install:
+    desc: Create venv and install dependencies
+    cmds:
+      - python3 -m venv {{.VENV}}
+      - '{{.PIP}} install -r requirements.txt'
+
+  bot:
+    desc: Run the Discord bot
+    deps: [_venv-check]
+    cmds:
+      - '{{.PYTHON}} -m daily_briefing.discord_bot'
+
+  run:
+    desc: Run the CLI debug runner (prints digest to stdout)
+    deps: [_venv-check]
+    cmds:
+      - '{{.PYTHON}} -m daily_briefing.main'
+
+  test:
+    desc: Run all smoke tests
+    deps: [_venv-check]
+    cmds:
+      - '{{.PYTHON}} daily_briefing/smoke_tests/test_apis.py'
+      - '{{.PYTHON}} daily_briefing/smoke_tests/test_sports.py'
+      - '{{.PYTHON}} daily_briefing/smoke_tests/test_agent.py'
+      - '{{.PYTHON}} daily_briefing/smoke_tests/test_discord_bot.py'
+
+  test:bot:
+    desc: Run Discord bot unit tests (no token required)
+    deps: [_venv-check]
+    cmds:
+      - '{{.PYTHON}} daily_briefing/smoke_tests/test_discord_bot.py'
+
+  web:
+    desc: Run the ADK web UI on port 8000
+    deps: [_venv-check]
+    cmds:
+      - '{{.VENV}}/bin/adk web --host 0.0.0.0 --port 8000'
+
+  _venv-check:
+    internal: true
+    desc: Ensure venv exists
+    preconditions:
+      - sh: test -f {{.VENV}}/bin/python3
+        msg: 'venv not found — run: task install'

@@ -39,6 +39,7 @@ from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types  # noqa: E402
 
 from daily_briefing.agent import now_et, root_agent  # noqa: E402
+from daily_briefing.log_config import configure_logging, preview as _preview  # noqa: E402
 from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -99,12 +100,6 @@ def _fmt_cause(exc: BaseException) -> str:
     """
     msg = str(exc).strip().splitlines()[0] if str(exc).strip() else ""
     return f"{type(exc).__name__}: {msg}" if msg else type(exc).__name__
-
-
-def _preview(text: str, limit: int = 120) -> str:
-    """Single-line, length-capped preview of *text* for log lines."""
-    flat = " ".join(text.split())
-    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
 def _split_message(text: str, limit: int = 2000) -> list[str]:
@@ -336,10 +331,7 @@ async def on_message(message: discord.Message) -> None:
 def main() -> None:
     global _runner, _channel_id
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging()
 
     token = os.environ.get("DISCORD_BOT_TOKEN", "")
     if not token:

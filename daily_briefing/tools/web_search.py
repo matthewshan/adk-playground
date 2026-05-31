@@ -11,6 +11,12 @@ import requests
 
 from daily_briefing.apis.tavily import search
 
+# Keep results small — on GitHub Models the whole request must fit 8000 tokens,
+# and raw Tavily content snippets are the biggest single contributor.
+_MAX_RESULTS = 3
+_MAX_CONTENT_CHARS = 300
+
+
 
 def web_search(query: str) -> str:
     """Search the web for recent or ad-hoc info outside weather/news/sports/calendar.
@@ -41,8 +47,7 @@ def web_search(query: str) -> str:
         return "No web results found."
 
     lines = [answer] if answer else []
-    lines += [
-        f"• {r.get('title', '')}: {r.get('content', '')} ({r.get('url', '')})"
-        for r in results
-    ]
+    for r in results[:_MAX_RESULTS]:
+        content = (r.get("content") or "")[:_MAX_CONTENT_CHARS]
+        lines.append(f"• {r.get('title', '')}: {content} ({r.get('url', '')})")
     return "\n".join(lines)
