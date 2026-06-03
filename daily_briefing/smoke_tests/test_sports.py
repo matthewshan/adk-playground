@@ -39,6 +39,17 @@ FAIL = "✗ FAIL"
 
 
 class SportsFormattingTests(unittest.TestCase):
+    def test_et_time_str_handles_est_and_edt(self) -> None:
+        from daily_briefing.apis._timefmt import et_time_str
+
+        # Summer game (EDT, UTC-4): 23:30 UTC → 7:30 PM ET.
+        summer = datetime.datetime(2026, 6, 4, 23, 30, tzinfo=datetime.timezone.utc)
+        self.assertEqual(et_time_str(summer), "7:30 PM ET")
+        # Winter game (EST, UTC-5): 00:30 UTC → 7:30 PM ET — the old hardcoded
+        # UTC-4 path returned 8:30 PM here.
+        winter = datetime.datetime(2026, 1, 15, 0, 30, tzinfo=datetime.timezone.utc)
+        self.assertEqual(et_time_str(winter), "7:30 PM ET")
+
     def test_tsdb_record_excludes_preseason(self) -> None:
         # intRound >= 100 marks preseason; those games must not enter the W-L record.
         preseason = [

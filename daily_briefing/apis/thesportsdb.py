@@ -6,6 +6,8 @@ import datetime
 
 import requests
 
+from daily_briefing.apis._timefmt import et_time_str
+
 _FREE_KEY = "3"
 
 
@@ -168,11 +170,7 @@ def get_upcoming_games(
                     tzinfo=datetime.timezone.utc
                 )
                 game_time_utc = event_dt.isoformat()
-                # Convert to ET for the detail field
-                edt_hour = (event_dt.hour - 4) % 24
-                h12 = edt_hour % 12 or 12
-                am_pm = "PM" if edt_hour >= 12 else "AM"
-                detail = f"{h12}:{event_dt.strftime('%M')} {am_pm} ET"
+                detail = et_time_str(event_dt)  # handles EST/EDT correctly
             except (ValueError, AttributeError):
                 pass
 

@@ -32,6 +32,7 @@ tasks:
       - '{{.PYTHON}} daily_briefing/smoke_tests/test_sports.py'
       - '{{.PYTHON}} daily_briefing/smoke_tests/test_agent.py'
       - '{{.PYTHON}} daily_briefing/smoke_tests/test_discord_bot.py'
+      - '{{.PYTHON}} daily_briefing/smoke_tests/test_logging.py'
 
   test:bot:
     desc: Run Discord bot unit tests (no token required)
