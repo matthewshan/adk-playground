@@ -28,30 +28,29 @@ def get_weather(
     """
     try:
         data = fetch_forecast(latitude, longitude)
-    except requests.RequestException as exc:
-        # Degrade gracefully — one upstream failure must not abort the whole briefing.
+        current = data["current"]
+        temp = round(current["temperature_2m"])
+        code = int(current["weathercode"])
+        wind = round(current["windspeed_10m"])
+        condition = WMO_CODES.get(code, f"code {code}")
+        lines = [f"Now: {temp}°F, {condition}, wind {wind} mph"]
+
+        hourly = data.get("hourly", {})
+        h_times: list[str] = hourly.get("time", [])
+        h_temps: list[float] = hourly.get("temperature_2m", [])
+        h_codes: list[int] = hourly.get("weathercode", [])
+        h_winds: list[float] = hourly.get("windspeed_10m", [])
+
+        for i, t in enumerate(h_times):
+            hour = int(t[11:13])
+            if hour in _FORECAST_HOURS:
+                f_temp = round(h_temps[i])
+                f_code = int(h_codes[i])
+                f_wind = round(h_winds[i])
+                f_cond = WMO_CODES.get(f_code, f"code {f_code}")
+                lines.append(f"{_FORECAST_HOURS[hour]}: {f_temp}°F, {f_cond}, wind {f_wind} mph")
+    except (requests.RequestException, KeyError, IndexError, ValueError, TypeError) as exc:
+        # Degrade gracefully — a failed or malformed response must not abort the briefing.
         return f"Weather unavailable: {type(exc).__name__}: {exc}"
-
-    current = data["current"]
-    temp = round(current["temperature_2m"])
-    code = int(current["weathercode"])
-    wind = round(current["windspeed_10m"])
-    condition = WMO_CODES.get(code, f"code {code}")
-    lines = [f"Now: {temp}°F, {condition}, wind {wind} mph"]
-
-    hourly = data.get("hourly", {})
-    h_times: list[str] = hourly.get("time", [])
-    h_temps: list[float] = hourly.get("temperature_2m", [])
-    h_codes: list[int] = hourly.get("weathercode", [])
-    h_winds: list[float] = hourly.get("windspeed_10m", [])
-
-    for i, t in enumerate(h_times):
-        hour = int(t[11:13])
-        if hour in _FORECAST_HOURS:
-            f_temp = round(h_temps[i])
-            f_code = int(h_codes[i])
-            f_wind = round(h_winds[i])
-            f_cond = WMO_CODES.get(f_code, f"code {f_code}")
-            lines.append(f"{_FORECAST_HOURS[hour]}: {f_temp}°F, {f_cond}, wind {f_wind} mph")
 
     return "\n".join(lines)

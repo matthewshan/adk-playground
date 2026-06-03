@@ -32,6 +32,21 @@ Chicago Cubs pass
 Use the right ESPN slugs (sport: baseball/football/basketball/hockey; league:
 mlb/nfl/nba/nhl/cfl). Don't say a team's data is unavailable until you've tried this.
 
+## Calendar lookups
+
+`get_calendar_events` defaults to the next 7 days. When the user asks about a
+specific date (e.g. "what's on June 15?"), call it with that date — e.g.
+`get_calendar_events(start_date="2026-06-15", days=1)`. Do NOT answer "nothing
+scheduled" for a date more than a week out without querying it directly; the
+default window does not reach that far.
+
+## Preseason vs. regular season
+
+Each sports game carries an `is_preseason` flag, and the `record` field counts
+regular-season games only. Don't present a preseason result as a regular-season
+record. If a team's only completed games are preseason, say the regular season
+hasn't started yet rather than reporting a misleading W-L record.
+
 ## Live scores
 
 `get_sports_scores` returns structured JSON. The `upcoming_games` list for each team

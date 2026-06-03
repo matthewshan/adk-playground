@@ -6,16 +6,30 @@ import base64
 import datetime
 import json
 import os
+from zoneinfo import ZoneInfo
 
 from daily_briefing.apis.google_calendar import fetch_events
 
+_ET = ZoneInfo("America/New_York")
 
-def get_calendar_events() -> str:
-    """Fetch today's events from a private Google Calendar via service account.
+
+def get_calendar_events(start_date: str = "", days: int = 7) -> str:
+    """Fetch events from a private Google Calendar via service account.
+
+    Defaults to the next 7 days (the morning-briefing window). To answer a
+    question about a specific date or a date further out, pass that date — e.g.
+    for "what's on June 15?" call get_calendar_events(start_date="2026-06-15",
+    days=1). The default 7-day window does NOT cover dates more than a week out,
+    so always pass start_date when the user names a specific later date rather
+    than reporting "nothing scheduled".
 
     Required environment variables:
       GOOGLE_CALENDAR_ID                   — Calendar ID (full address or "primary")
       GOOGLE_SERVICE_ACCOUNT_JSON_BASE64   — base64-encoded service account JSON key
+
+    Args:
+        start_date: ISO date (YYYY-MM-DD) to start from. Empty = today (ET).
+        days: Size of the window in days (min 1). Default 7.
 
     Returns:
         A bulleted list of event titles and times, or "Nothing scheduled".
@@ -31,16 +45,23 @@ def get_calendar_events() -> str:
     except (ValueError, json.JSONDecodeError) as exc:
         return f"Calendar unavailable: bad service-account JSON: {exc}"
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(_ET)
     today = now.date()
-    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_of_window = start_of_day + datetime.timedelta(days=7)
+    if start_date:
+        try:
+            base = datetime.date.fromisoformat(start_date)
+        except ValueError:
+            return f"Calendar unavailable: bad start_date '{start_date}' (use YYYY-MM-DD)."
+        start_of_window = datetime.datetime.combine(base, datetime.time.min, tzinfo=_ET)
+    else:
+        start_of_window = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_window = start_of_window + datetime.timedelta(days=max(1, days))
 
     try:
         items = fetch_events(
             sa_info,
             calendar_id,
-            start_of_day.isoformat(),
+            start_of_window.isoformat(),
             end_of_window.isoformat(),
         )
     except Exception as exc:

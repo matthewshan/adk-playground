@@ -69,12 +69,15 @@ def get_team_record(events: list[dict], team_name: str) -> str:
 
     Returns:
         Record string like "3-1", or empty string if no completed games.
+        Preseason games are excluded so the record reflects the regular season.
     """
     wins = losses = 0
     team_lower = team_name.lower()
     for e in events:
         if e.get("strStatus") not in ("FT", "AET", "PEN"):
             continue
+        if is_preseason(e):
+            continue  # preseason results don't count toward the W-L record
         try:
             hs = int(e.get("intHomeScore") or 0)
             aws = int(e.get("intAwayScore") or 0)
