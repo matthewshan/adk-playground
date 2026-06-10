@@ -25,6 +25,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 # Allow running this file directly from any working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+from daily_briefing.apis.thesportsdb import get_team_record as _tsdb_get_team_record
 from daily_briefing.tools.sports import TrackedTeam, _get_upcoming_games, get_sports_scores
 
 _SMOKE_TEAMS = [
@@ -38,6 +39,32 @@ FAIL = "✗ FAIL"
 
 
 class SportsFormattingTests(unittest.TestCase):
+    def test_et_time_str_handles_est_and_edt(self) -> None:
+        from daily_briefing.apis._timefmt import et_time_str
+
+        # Summer game (EDT, UTC-4): 23:30 UTC → 7:30 PM ET.
+        summer = datetime.datetime(2026, 6, 4, 23, 30, tzinfo=datetime.timezone.utc)
+        self.assertEqual(et_time_str(summer), "7:30 PM ET")
+        # Winter game (EST, UTC-5): 00:30 UTC → 7:30 PM ET — the old hardcoded
+        # UTC-4 path returned 8:30 PM here.
+        winter = datetime.datetime(2026, 1, 15, 0, 30, tzinfo=datetime.timezone.utc)
+        self.assertEqual(et_time_str(winter), "7:30 PM ET")
+
+    def test_tsdb_record_excludes_preseason(self) -> None:
+        # intRound >= 100 marks preseason; those games must not enter the W-L record.
+        preseason = [
+            {"strStatus": "FT", "intRound": "110", "strHomeTeam": "Hamilton Tiger-Cats",
+             "strAwayTeam": "Toronto Argonauts", "intHomeScore": "30", "intAwayScore": "10"},
+            {"strStatus": "FT", "intRound": "111", "strHomeTeam": "Montreal Alouettes",
+             "strAwayTeam": "Hamilton Tiger-Cats", "intHomeScore": "20", "intAwayScore": "7"},
+        ]
+        self.assertEqual(_tsdb_get_team_record(preseason, "Hamilton Tiger-Cats"), "")
+        regular_win = {"strStatus": "FT", "intRound": "1", "strHomeTeam": "Hamilton Tiger-Cats",
+                       "strAwayTeam": "Montreal Alouettes", "intHomeScore": "25", "intAwayScore": "20"}
+        self.assertEqual(
+            _tsdb_get_team_record(preseason + [regular_win], "Hamilton Tiger-Cats"), "1-0"
+        )
+
     def test_upcoming_game_marks_preseason(self) -> None:
         today = datetime.date(2026, 5, 23)
         events = [

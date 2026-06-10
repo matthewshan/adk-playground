@@ -66,6 +66,7 @@ Raw equivalents:
 .venv/bin/python3 daily_briefing/smoke_tests/test_sports.py
 .venv/bin/python3 daily_briefing/smoke_tests/test_agent.py
 .venv/bin/python3 daily_briefing/smoke_tests/test_discord_bot.py
+.venv/bin/python3 daily_briefing/smoke_tests/test_logging.py
 # Supabase memory smoke test — requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + GEMINI_API_KEY
 .venv/bin/python3 daily_briefing/smoke_tests/test_memory.py
 ```
@@ -146,6 +147,7 @@ adk-playground/
       test_agent.py
       test_apis.py
       test_discord_bot.py
+      test_logging.py     # Logging-callback unit tests (correlation, tokens, error level)
       test_memory.py      # Supabase pgvector smoke test
       test_sports.py
   docs/                   # Architecture, setup, prompt, and deployment notes
@@ -178,7 +180,7 @@ each value, what it's for, limits, and gotchas**, see the
 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | yes | Base64-encoded service account JSON |
 | `SUPABASE_URL` | optional | Supabase project URL — enables long-term memory |
 | `SUPABASE_SERVICE_ROLE_KEY` | optional | Service-role key — bot warns and degrades if absent |
-| `LOG_LEVEL` | no | Default `INFO`. Agent callbacks (`daily_briefing/logging_callbacks.py`) log one compact line per prompt, response, and tool call — DEBUG just adds stdlib chatter |
+| `LOG_LEVEL` | no | Default `INFO`. Agent callbacks (`daily_briefing/logging_callbacks.py`) log one compact line per invocation, prompt, response, tool call, and token-usage tally — each tagged with a `[<inv> u=<user>]` correlation id so concurrent sessions stay traceable. Error-shaped tool results log at WARNING. DEBUG just adds stdlib chatter |
 
 ---
 

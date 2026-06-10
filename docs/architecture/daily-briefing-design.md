@@ -75,7 +75,10 @@ discord_bot.py — @tasks.loop(time=07:00 ET)
                  │                              apis/thesportsdb.py     → TheSportsDB API (CFL fallback)
                  ├─ tools/calendar_events.py  → apis/google_calendar.py → Google Calendar API v3
                  └─ LoadMemoryTool()          → SupabaseMemoryService.search_memory()
-            └─ after_agent_callback (_save_to_memory)
+            ├─ logging_callbacks (before/after agent, model, tool)
+            │    └─ one correlation-tagged line per invocation / prompt / response /
+            │       tool call / token-usage tally; errors → WARNING
+            └─ after_agent_callback ([_save_to_memory, log_after_agent])
                  └─ SupabaseMemoryService.add_session_to_memory()
                       └─ apis/supabase.py → Supabase pgvector (agent_memory table)
   └─ channel.send() [chunked, ≤2000 chars per send]

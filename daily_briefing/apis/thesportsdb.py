@@ -6,6 +6,8 @@ import datetime
 
 import requests
 
+from daily_briefing.apis._timefmt import et_time_str
+
 _FREE_KEY = "3"
 
 
@@ -69,12 +71,15 @@ def get_team_record(events: list[dict], team_name: str) -> str:
 
     Returns:
         Record string like "3-1", or empty string if no completed games.
+        Preseason games are excluded so the record reflects the regular season.
     """
     wins = losses = 0
     team_lower = team_name.lower()
     for e in events:
         if e.get("strStatus") not in ("FT", "AET", "PEN"):
             continue
+        if is_preseason(e):
+            continue  # preseason results don't count toward the W-L record
         try:
             hs = int(e.get("intHomeScore") or 0)
             aws = int(e.get("intAwayScore") or 0)
@@ -165,11 +170,7 @@ def get_upcoming_games(
                     tzinfo=datetime.timezone.utc
                 )
                 game_time_utc = event_dt.isoformat()
-                # Convert to ET for the detail field
-                edt_hour = (event_dt.hour - 4) % 24
-                h12 = edt_hour % 12 or 12
-                am_pm = "PM" if edt_hour >= 12 else "AM"
-                detail = f"{h12}:{event_dt.strftime('%M')} {am_pm} ET"
+                detail = et_time_str(event_dt)  # handles EST/EDT correctly
             except (ValueError, AttributeError):
                 pass
 

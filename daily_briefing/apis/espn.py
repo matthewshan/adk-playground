@@ -7,6 +7,8 @@ import re
 
 import requests
 
+from daily_briefing.apis._timefmt import et_time_str
+
 
 def find_team_id(sport: str, league: str, team_name: str) -> str | None:
     """Return the ESPN numeric team ID for *team_name*, or None if not found."""
@@ -119,11 +121,8 @@ def _game_time_utc(event: dict) -> str:
 
 
 def _scheduled_time_et(event_dt: datetime.datetime) -> str:
-    """Convert a UTC datetime to a 12-hour ET time string (EDT = UTC-4)."""
-    local_hour = (event_dt.hour - 4) % 24
-    am_pm = "PM" if local_hour >= 12 else "AM"
-    h12 = local_hour % 12 or 12
-    return f"{h12}:{event_dt.strftime('%M')} {am_pm} ET"
+    """Convert a UTC datetime to a 12-hour ET time string (handles EST/EDT)."""
+    return et_time_str(event_dt)
 
 
 def get_recent_results(

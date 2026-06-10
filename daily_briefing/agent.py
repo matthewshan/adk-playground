@@ -9,8 +9,10 @@ from google.adk.tools.load_memory_tool import LoadMemoryTool
 
 from daily_briefing.context_trim import make_trimmer
 from daily_briefing.logging_callbacks import (
+    log_after_agent,
     log_after_model,
     log_after_tool,
+    log_before_agent,
     log_before_model,
     log_before_tool,
 )
@@ -87,11 +89,13 @@ def make_agent(name: str = "daily_briefing") -> Agent:
         description="Daily morning digest agent.",
         instruction=_instruction,
         tools=tools,
+        before_agent_callback=log_before_agent,
         before_model_callback=before_model_callback,
         after_model_callback=log_after_model,
         before_tool_callback=log_before_tool,
         after_tool_callback=log_after_tool,
-        after_agent_callback=_save_to_memory,
+        # Logging summary runs alongside the memory-persist callback.
+        after_agent_callback=[_save_to_memory, log_after_agent],
     )
 
 
