@@ -95,6 +95,7 @@ graph TB
         direction LR
         OM["Open-Meteo"]
         GN["GNews"]
+        RSS_["AI RSS"]
         ESPN_["ESPN"]
         TSDB_["TheSportsDB"]
         GCAL_["Google Calendar"]
@@ -110,6 +111,7 @@ graph TB
     LLM --> WT & NT & ST & CT & LMT
     WT --> OM
     NT --> GN
+    NT --> RSS_
     ST --> ESPN_
     ST -. "CFL fallback" .-> TSDB_
     CT --> GCAL_
@@ -129,6 +131,7 @@ graph TB
     click LMT showDetail
     click OM showDetail
     click GN showDetail
+    click RSS_ showDetail
     click ESPN_ showDetail
     click TSDB_ showDetail
     click GCAL_ showDetail
@@ -173,8 +176,11 @@ sequenceDiagram
     AGENT->>TOOLS: get_weather()
     TOOLS-->>AGENT: conditions + forecast
 
+    AGENT->>TOOLS: get_ai_news()
+    TOOLS-->>AGENT: AI / ML headlines (RSS)
+
     AGENT->>TOOLS: get_news()
-    TOOLS-->>AGENT: headlines + tech highlights
+    TOOLS-->>AGENT: general headlines
 
     AGENT->>TOOLS: get_sports_scores()
     TOOLS-->>AGENT: Lions, Blue Jays, Tiger-Cats
@@ -249,7 +255,7 @@ sequenceDiagram
           <tr>
             <td><code>apis/</code></td>
             <td>Raw HTTP clients</td>
-            <td><code>open_meteo.py</code>, <code>gnews.py</code>, <code>espn.py</code>, <code>thesportsdb.py</code>, <code>google_calendar.py</code>, <code>supabase.py</code></td>
+            <td><code>open_meteo.py</code>, <code>gnews.py</code>, <code>rss.py</code>, <code>espn.py</code>, <code>thesportsdb.py</code>, <code>google_calendar.py</code>, <code>supabase.py</code></td>
           </tr>
           <tr>
             <td><code>memory/</code></td>
@@ -398,10 +404,10 @@ sequenceDiagram
       bullets: ['API: Open-Meteo (free, no key needed)', 'Returns: temp, conditions, wind', 'Three forecast slots: 8 am, 1 pm, 6 pm', 'Coordinates hardcoded for Grand Rapids'],
     },
     NT: {
-      title: 'News Tool',
-      file: 'tools/news.py → apis/gnews.py',
-      desc: 'Fetches top headlines and cloud/AI focused stories from GNews.',
-      bullets: ['Requires GNEWS_API_KEY', 'Free tier: 100 requests / day', '3 general + 2 cloud/AI headlines', 'Returns: title, description, URL, source'],
+      title: 'News Tools',
+      file: 'tools/news.py → apis/gnews.py + apis/rss.py',
+      desc: 'Two tools: get_ai_news (AI/ML headlines from RSS, the briefing leads with these) and get_news (general top headlines from GNews).',
+      bullets: ['get_ai_news: curated AI RSS feeds, no key', 'get_news: GNews top headlines (GNEWS_API_KEY)', 'AI headlines lead the News section', 'Returns deduped "headline — source" bullets'],
     },
     ST: {
       title: 'Sports Tool',
@@ -432,6 +438,12 @@ sequenceDiagram
       file: 'apis/gnews.py',
       desc: 'News aggregation API returning top headlines filtered by category and search term.',
       bullets: ['Requires GNEWS_API_KEY', 'Free tier: 100 requests / day', 'Supports category + keyword search', 'Returns JSON with article metadata'],
+    },
+    RSS_: {
+      title: 'AI News RSS Feeds',
+      file: 'apis/rss.py',
+      desc: 'Curated AI / ML RSS feeds parsed with the stdlib XML reader. No API key required.',
+      bullets: ['Sources: TechCrunch AI, VentureBeat AI, Google News AI search', 'No key, no extra dependency', 'Deduped by title, most-recent-first', 'Resilient: skips feeds that fail'],
     },
     ESPN_: {
       title: 'ESPN (Unofficial API)',

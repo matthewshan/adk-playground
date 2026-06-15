@@ -57,6 +57,6 @@ def _github_models():
     # LiteLLM's "github/" provider hits GitHub Models, GitHub's official
     # OpenAI-compatible inference endpoint. Auth: GITHUB_API_KEY (a PAT with
     # `models:read` scope). LiteLLM strips company prefixes — pass the bare
-    # model name (e.g. "gpt-4.1"), not "openai/gpt-4.1".
-    model = os.getenv("GITHUB_MODEL", "gpt-4.1")
+    # model name (e.g. "gpt-5-mini"), not "openai/gpt-5-mini".
+    model = os.getenv("GITHUB_MODEL", "gpt-5-mini")
     return LiteLlm(model=f"github/{model}")
