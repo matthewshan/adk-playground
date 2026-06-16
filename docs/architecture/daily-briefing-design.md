@@ -32,6 +32,7 @@ daily_briefing/
     discord.py          # Discord webhook POST (unused by agent; kept for manual use)
     espn.py             # ESPN team, schedule, scoreboard, standings calls
     gnews.py            # GNews headlines
+    rss.py              # AI-news RSS feeds (no key required)
     google_calendar.py  # Google Calendar v3 client
     open_meteo.py       # Open-Meteo forecast client
     supabase.py         # Supabase pgvector insert + similarity search
@@ -71,6 +72,7 @@ discord_bot.py — @tasks.loop(time=07:00 ET)
             └─ agent.py (ADK Agent)
                  ├─ tools/weather.py          → apis/open_meteo.py      → Open-Meteo API
                  ├─ tools/news.py             → apis/gnews.py           → GNews API
+                 │  (get_news + get_ai_news)    apis/rss.py             → AI-news RSS feeds
                  ├─ tools/sports.py           → apis/espn.py            → ESPN public API
                  │                              apis/thesportsdb.py     → TheSportsDB API (CFL fallback)
                  ├─ tools/calendar_events.py  → apis/google_calendar.py → Google Calendar API v3
@@ -114,7 +116,8 @@ main.py (CLI only — not used in production)
 | Tool module | Raw client | API | Auth | Notes |
 |-------------|------------|-----|------|-------|
 | `tools/weather.py` | `apis/open_meteo.py` | Open-Meteo | None | `current` + `hourly` params; `timezone=America/Detroit` |
-| `tools/news.py` | `apis/gnews.py` | GNews | `GNEWS_API_KEY` | 10 general headlines; free tier is localhost-only |
+| `tools/news.py` (`get_news`) | `apis/gnews.py` | GNews | `GNEWS_API_KEY` | 10 general headlines; free tier is localhost-only |
+| `tools/news.py` (`get_ai_news`) | `apis/rss.py` | Curated AI RSS feeds | None | AI/ML headlines from TechCrunch, VentureBeat, Google News; deduped, most-recent-first |
 | `tools/sports.py` | `apis/espn.py` | ESPN public API | None | Team lookup, records, schedule, scoreboard, standings |
 | `tools/sports.py` | `apis/thesportsdb.py` | TheSportsDB | None | Fallback for CFL schedules/results when ESPN lacks current data |
 | `tools/calendar_events.py` | `apis/google_calendar.py` | Google Calendar v3 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Service account; share calendar with the SA email |

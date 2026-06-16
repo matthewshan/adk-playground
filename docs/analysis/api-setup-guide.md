@@ -17,7 +17,7 @@ cp daily_briefing/.env.example daily_briefing/.env   # then fill in the values b
 | `GEMINI_API_KEY` | **always** | Gemini LLM (if `BACKEND=gemini`) **and** memory embeddings (all backends) |
 | `GEMINI_MODEL` | optional | Override the Gemini chat model (default `gemini-3.1-flash-lite`) |
 | `GITHUB_API_KEY` | if `BACKEND=github` | Fine-grained GitHub PAT with `Models: read` |
-| `GITHUB_MODEL` | optional | GitHub Models model id (default `gpt-4.1`) |
+| `GITHUB_MODEL` | optional | GitHub Models model id (default `gpt-5-mini`) |
 | `OLLAMA_API_BASE` | if `BACKEND=ollama` | URL of your local Ollama server |
 | `OLLAMA_MODEL` | if `BACKEND=ollama` | Local model name (e.g. `qwen2.5:7b`) |
 | `GNEWS_API_KEY` | for news | GNews free-tier API key |
@@ -92,16 +92,16 @@ OpenAI-compatible inference endpoint, routed through LiteLLM's `github/*` provid
 
 ### Notes & limits
 - Rate limits scale with your Copilot tier (Free / Pro / Business / Enterprise).
-- Default `GITHUB_MODEL=gpt-4.1` draws **0× credits** on Copilot Pro. See the fallback
-  ladder in `daily_briefing/.env.example` and the full catalog at
-  [github.com/marketplace/models](https://github.com/marketplace/models).
-- Use the **bare** model id (`gpt-4.1`), not `openai/gpt-4.1` — LiteLLM strips company prefixes.
+- Default `GITHUB_MODEL=gpt-5-mini` is fast and cheap and fits the free-tier request cap
+  comfortably for this workload. See the fallback ladder in `daily_briefing/.env.example`
+  and the full catalog at [github.com/marketplace/models](https://github.com/marketplace/models).
+- Use the **bare** model id (`gpt-5-mini`), not `openai/gpt-5-mini` — LiteLLM strips company prefixes.
 - A `403 No access to model: …` means that model isn't on your plan/region — not a token-scope problem.
 
 ### Environment variables
 ```dotenv
 GITHUB_API_KEY=<fine-grained PAT>
-GITHUB_MODEL=gpt-4.1
+GITHUB_MODEL=gpt-5-mini
 BACKEND=github
 ```
 
