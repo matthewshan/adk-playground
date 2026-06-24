@@ -11,47 +11,57 @@ from daily_briefing.apis._timefmt import et_time_str
 _FREE_KEY = "3"
 
 
-def get_team_events(league_label: str, team_name: str, year: int) -> list[dict]:
-    """Return all season events for *team_name* from TheSportsDB.
-
-    Discovers the league ID by searching *league_label* (e.g. "CFL"), fetches
-    all events for *year*, and filters to those involving *team_name*.
-
-    Returns:
-        List of event dicts for the team, or empty list on any error.
-    """
+def find_team_id(league_label: str, team_name: str) -> str | None:
+    """Return TheSportsDB numeric team id for *team_name* in *league_label*, or None."""
     try:
-        teams_resp = requests.get(
+        resp = requests.get(
             f"https://www.thesportsdb.com/api/v1/json/{_FREE_KEY}/search_all_teams.php",
             params={"l": league_label},
             timeout=10,
         )
-        teams_resp.raise_for_status()
-        all_teams = teams_resp.json().get("teams") or []
-        team_lower = team_name.lower()
-        league_id: str | None = None
-        for t in all_teams:
-            t_name = t.get("strTeam", "").lower()
-            if team_lower == t_name or team_lower in t_name or t_name in team_lower:
-                league_id = str(t.get("idLeague", ""))
-                break
-        if not league_id:
-            return []
+        resp.raise_for_status()
+    except requests.RequestException:
+        return None
+    team_lower = team_name.lower()
+    for t in resp.json().get("teams") or []:
+        name = t.get("strTeam", "").lower()
+        if team_lower == name or team_lower in name or name in team_lower:
+            return str(t.get("idTeam") or "") or None
+    return None
 
-        sched_resp = requests.get(
-            f"https://www.thesportsdb.com/api/v1/json/{_FREE_KEY}/eventsseason.php",
-            params={"id": league_id, "s": str(year)},
+
+def _fetch_events(endpoint: str, team_id: str, key: str) -> list[dict]:
+    """Fetch a team-id event list endpoint (eventslast/eventsnext), [] on error."""
+    try:
+        resp = requests.get(
+            f"https://www.thesportsdb.com/api/v1/json/{_FREE_KEY}/{endpoint}",
+            params={"id": team_id},
             timeout=10,
         )
-        sched_resp.raise_for_status()
-        all_events = sched_resp.json().get("events") or []
-        return [
-            e for e in all_events
-            if team_lower in e.get("strHomeTeam", "").lower()
-            or team_lower in e.get("strAwayTeam", "").lower()
-        ]
+        resp.raise_for_status()
+        events = resp.json().get(key)
     except requests.RequestException:
         return []
+    return events if isinstance(events, list) else []
+
+
+def get_team_events(league_label: str, team_name: str) -> list[dict]:
+    """Return a team's recent + upcoming events from TheSportsDB.
+
+    Uses the team-id eventslast/eventsnext endpoints, which return current data
+    on the free key — unlike eventsseason, which the free key truncates (e.g.
+    CFL, where ESPN also has no post-2023 data).
+
+    Returns:
+        List of event dicts for the team, or empty list on any error.
+    """
+    team_id = find_team_id(league_label, team_name)
+    if not team_id:
+        return []
+    return (
+        _fetch_events("eventslast.php", team_id, "results")
+        + _fetch_events("eventsnext.php", team_id, "events")
+    )
 
 
 def is_preseason(event: dict) -> bool:
