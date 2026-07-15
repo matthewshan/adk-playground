@@ -179,7 +179,9 @@ async def _run_agent(user_id: str, prompt: str) -> str:
         if not event.content or not event.content.parts:
             continue
         for part in event.content.parts:
-            if part.text:
+            # Reasoning models (e.g. qwen3.5) return their thinking as
+            # thought-flagged parts inside the final response — not for Discord.
+            if part.text and not part.thought:
                 response_parts.append(part.text)
 
     return "".join(response_parts) or "(No response from agent.)"
