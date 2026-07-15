@@ -20,6 +20,7 @@ cp daily_briefing/.env.example daily_briefing/.env   # then fill in the values b
 | `GITHUB_MODEL` | optional | GitHub Models model id (default `gpt-4.1`) |
 | `OLLAMA_API_BASE` | if `BACKEND=ollama` | URL of an Ollama server — local, or the pc-broker proxy |
 | `OLLAMA_MODEL` | if `BACKEND=ollama` | Local model name (e.g. `qwen2.5:7b`) |
+| `OLLAMA_NUM_CTX` | optional | Context window (default `16384` — Ollama's own 4096 default truncates the briefing) |
 | `PC_BROKER_URL` | if Ollama is behind pc-broker | Broker base URL — the bot wakes the PC and waits for `ready` before each run |
 | `PC_BROKER_WAKE_TIMEOUT` | optional | Seconds to wait for the PC to wake (default `300`) |
 | `GNEWS_API_KEY` | for news | GNews free-tier API key |

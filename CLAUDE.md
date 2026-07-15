@@ -171,6 +171,7 @@ each value, what it's for, limits, and gotchas**, see the
 | `GEMINI_MODEL` | no | default `gemini-3.1-flash-lite` |
 | `OLLAMA_API_BASE` | if Ollama | e.g. `http://127.0.0.1:11434`, or the pc-broker base URL |
 | `OLLAMA_MODEL` | if Ollama | e.g. `qwen2.5:7b` |
+| `OLLAMA_NUM_CTX` | no | Context window sent as `options.num_ctx` (default `16384`; Ollama's own default of 4096 truncates the briefing) |
 | `PC_BROKER_URL` | no | Set when `OLLAMA_API_BASE` points at pc-broker — the bot POSTs `/api/power/on` and polls `/api/status` until `ready` before each agent run (`daily_briefing/broker.py`) |
 | `PC_BROKER_WAKE_TIMEOUT` | no | Seconds to wait for the PC to become `ready` (default `300`) |
 | `GITHUB_API_KEY` | if GitHub | Fine-grained PAT with `Models: read` scope — https://github.com/settings/tokens |

@@ -213,6 +213,11 @@ python3 daily_briefing/smoke_tests/test_agent.py</pre>
             <td>Model tag. Recommended: <code>qwen2.5:7b</code> (~4.5 GB, excellent tool calling). <strong>Do not use <code>qwen3:8b</code></strong> — its thinking/reasoning mode produces extremely verbose output.</td>
           </tr>
           <tr>
+            <td><code>OLLAMA_NUM_CTX</code></td>
+            <td><span class="req-no">optional</span></td>
+            <td>Context window sent as <code>options.num_ctx</code>. Defaults to <code>16384</code> — Ollama's own 4096 default truncates the multi-tool briefing mid-response.</td>
+          </tr>
+          <tr>
             <td><code>PC_BROKER_URL</code></td>
             <td><span class="req-no">optional</span></td>
             <td>Set when <code>OLLAMA_API_BASE</code> points at pc-broker (the Wake-on-LAN Ollama proxy for the gaming PC). Before each agent run the bot POSTs <code>/api/power/on</code> and polls <code>/api/status</code> until <code>ready</code>.</td>

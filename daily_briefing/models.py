@@ -50,7 +50,12 @@ def _gemini():
 
 def _ollama():
     model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-    return LiteLlm(model=f"ollama_chat/{model}")
+    # Ollama defaults num_ctx to 4096, which the briefing blows through
+    # (system prompt + tool schemas + tool results ≈ 4k before the digest is
+    # even written — the response gets truncated mid-sentence). 16384 matches
+    # pc-broker's num_ctx cap.
+    num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "16384"))
+    return LiteLlm(model=f"ollama_chat/{model}", num_ctx=num_ctx)
 
 
 def _github_models():
