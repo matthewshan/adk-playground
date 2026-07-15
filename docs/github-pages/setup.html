@@ -213,6 +213,21 @@ python3 daily_briefing/smoke_tests/test_agent.py</pre>
             <td>Model tag. Recommended: <code>qwen2.5:7b</code> (~4.5 GB, excellent tool calling). <strong>Do not use <code>qwen3:8b</code></strong> — its thinking/reasoning mode produces extremely verbose output.</td>
           </tr>
           <tr>
+            <td><code>OLLAMA_NUM_CTX</code></td>
+            <td><span class="req-no">optional</span></td>
+            <td>Context window sent as <code>options.num_ctx</code>. Defaults to <code>16384</code> — Ollama's own 4096 default truncates the multi-tool briefing mid-response.</td>
+          </tr>
+          <tr>
+            <td><code>PC_BROKER_URL</code></td>
+            <td><span class="req-no">optional</span></td>
+            <td>Set when <code>OLLAMA_API_BASE</code> points at pc-broker (the Wake-on-LAN Ollama proxy for the gaming PC). Before each agent run the bot POSTs <code>/api/power/on</code> and polls <code>/api/status</code> until <code>ready</code>.</td>
+          </tr>
+          <tr>
+            <td><code>PC_BROKER_WAKE_TIMEOUT</code></td>
+            <td><span class="req-no">optional</span></td>
+            <td>Seconds to wait for the PC behind pc-broker to become ready. Default <code>300</code>.</td>
+          </tr>
+          <tr>
             <td><code>GITHUB_API_KEY</code></td>
             <td><span class="req-yes">if GitHub</span></td>
             <td>Fine-grained GitHub PAT with the <code>Models: read</code> scope (no repository access required). Create at <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">github.com/settings/tokens</a>. LiteLLM reads this env var name automatically for the <code>github/*</code> provider.</td>

@@ -38,6 +38,7 @@ from google.adk.runners import Runner  # noqa: E402
 from google.adk.sessions.in_memory_session_service import InMemorySessionService  # noqa: E402
 from google.genai import types  # noqa: E402
 
+from daily_briefing import broker  # noqa: E402
 from daily_briefing.agent import now_et, root_agent  # noqa: E402
 from daily_briefing.log_config import configure_logging, preview as _preview  # noqa: E402
 from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService  # noqa: E402
@@ -153,6 +154,9 @@ async def _run_agent(user_id: str, prompt: str) -> str:
     """
     assert _runner is not None, "runner not initialised"
 
+    # Ollama-via-pc-broker: wake the PC and wait for readiness (no-op otherwise).
+    await broker.ensure_ready()
+
     # Clear any prior memory-failure marker so it reflects only this turn.
     mem = getattr(_runner, "memory_service", None)
     if mem is not None:
@@ -175,7 +179,9 @@ async def _run_agent(user_id: str, prompt: str) -> str:
         if not event.content or not event.content.parts:
             continue
         for part in event.content.parts:
-            if part.text:
+            # Reasoning models (e.g. qwen3.5) return their thinking as
+            # thought-flagged parts inside the final response — not for Discord.
+            if part.text and not part.thought:
                 response_parts.append(part.text)
 
     return "".join(response_parts) or "(No response from agent.)"

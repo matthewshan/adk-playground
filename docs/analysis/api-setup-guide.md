@@ -18,8 +18,11 @@ cp daily_briefing/.env.example daily_briefing/.env   # then fill in the values b
 | `GEMINI_MODEL` | optional | Override the Gemini chat model (default `gemini-3.1-flash-lite`) |
 | `GITHUB_API_KEY` | if `BACKEND=github` | Fine-grained GitHub PAT with `Models: read` |
 | `GITHUB_MODEL` | optional | GitHub Models model id (default `gpt-5-mini`) |
-| `OLLAMA_API_BASE` | if `BACKEND=ollama` | URL of your local Ollama server |
+| `OLLAMA_API_BASE` | if `BACKEND=ollama` | URL of an Ollama server — local, or the pc-broker proxy |
 | `OLLAMA_MODEL` | if `BACKEND=ollama` | Local model name (e.g. `qwen2.5:7b`) |
+| `OLLAMA_NUM_CTX` | optional | Context window (default `16384` — Ollama's own 4096 default truncates the briefing) |
+| `PC_BROKER_URL` | if Ollama is behind pc-broker | Broker base URL — the bot wakes the PC and waits for `ready` before each run |
+| `PC_BROKER_WAKE_TIMEOUT` | optional | Seconds to wait for the PC to wake (default `300`) |
 | `GNEWS_API_KEY` | for news | GNews free-tier API key |
 | `TAVILY_API_KEY` | if `BACKEND` is `ollama`/`github` | Tavily web-search key for the portable `web_search` tool (Gemini uses native `google_search`) |
 | `DISCORD_BOT_TOKEN` | to run the bot | Discord bot token |
@@ -45,10 +48,10 @@ Picks which provider answers the briefing. One of:
 |---|---|---|
 | `gemini` (default) | Google AI Studio | `GEMINI_API_KEY` |
 | `github` | GitHub Models (OpenAI-compatible) | `GITHUB_API_KEY` |
-| `ollama` | A local Ollama server | `OLLAMA_API_BASE`, `OLLAMA_MODEL` |
+| `ollama` | An Ollama server (local, or the gaming PC via pc-broker) | `OLLAMA_API_BASE`, `OLLAMA_MODEL` (+ `PC_BROKER_URL` when behind pc-broker) |
 
 ```dotenv
-BACKEND=github
+BACKEND=ollama
 ```
 
 Backend selection lives in `daily_briefing/models.py` (`make_model()`), one helper per
@@ -123,6 +126,24 @@ BACKEND=ollama
 ```
 
 `qwen2.5:7b` (~4.5 GB) fits in 8 GB VRAM and does tool calling reliably.
+
+### Via pc-broker (gaming-PC Ollama, production setup)
+
+Instead of a locally running Ollama, point `OLLAMA_API_BASE` at
+[pc-broker](https://github.com/matthewshan/pc-broker), which wakes the gaming
+PC over Wake-on-LAN and proxies its Ollama (`/api/chat` is an
+Ollama-compatible alias). Also set `PC_BROKER_URL` to the same base URL — the
+bot then wakes the PC (`POST /api/power/on`) and polls `/api/status` until
+`ready` before every agent run, since the broker answers 503 while the PC is
+asleep. Cold boot + model load typically takes 1–3 minutes; tune
+`PC_BROKER_WAKE_TIMEOUT` if needed.
+
+```dotenv
+OLLAMA_API_BASE=http://pc-broker.pc-broker.svc.cluster.local:8000
+OLLAMA_MODEL=qwen2.5:7b
+PC_BROKER_URL=http://pc-broker.pc-broker.svc.cluster.local:8000
+BACKEND=ollama
+```
 
 ---
 
