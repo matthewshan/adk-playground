@@ -122,6 +122,7 @@ adk-playground/
     agent.py              # ADK Agent — make_agent(), now_et(), _save_to_memory, LoadMemoryTool
     instruction.md        # System prompt (the ONLY place the prompt lives)
     main.py               # CLI debug runner — prints digest to stdout (not used in production)
+    broker.py             # pc-broker wake helper — wakes the gaming PC before Ollama runs
     discord_bot.py        # Long-running bot — scheduled briefing (7 AM ET) + conversation
     Dockerfile            # Legacy CronJob image (bot now handles scheduling)
     Dockerfile.bot        # Container image for the Discord bot (primary)
@@ -168,8 +169,10 @@ each value, what it's for, limits, and gotchas**, see the
 | `BACKEND` | no | `gemini` (default), `ollama`, or `github` |
 | `GEMINI_API_KEY` | if Gemini | Google AI Studio key |
 | `GEMINI_MODEL` | no | default `gemini-3.1-flash-lite` |
-| `OLLAMA_API_BASE` | if Ollama | e.g. `http://127.0.0.1:11434` |
+| `OLLAMA_API_BASE` | if Ollama | e.g. `http://127.0.0.1:11434`, or the pc-broker base URL |
 | `OLLAMA_MODEL` | if Ollama | e.g. `qwen2.5:7b` |
+| `PC_BROKER_URL` | no | Set when `OLLAMA_API_BASE` points at pc-broker — the bot POSTs `/api/power/on` and polls `/api/status` until `ready` before each agent run (`daily_briefing/broker.py`) |
+| `PC_BROKER_WAKE_TIMEOUT` | no | Seconds to wait for the PC to become `ready` (default `300`) |
 | `GITHUB_API_KEY` | if GitHub | Fine-grained PAT with `Models: read` scope — https://github.com/settings/tokens |
 | `GITHUB_MODEL` | no | default `gpt-4.1`; see `daily_briefing/.env.example` for the fallback ladder |
 | `GNEWS_API_KEY` | yes | GNews free tier |

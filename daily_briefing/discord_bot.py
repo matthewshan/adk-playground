@@ -38,6 +38,7 @@ from google.adk.runners import Runner  # noqa: E402
 from google.adk.sessions.in_memory_session_service import InMemorySessionService  # noqa: E402
 from google.genai import types  # noqa: E402
 
+from daily_briefing import broker  # noqa: E402
 from daily_briefing.agent import now_et, root_agent  # noqa: E402
 from daily_briefing.log_config import configure_logging, preview as _preview  # noqa: E402
 from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService  # noqa: E402
@@ -152,6 +153,9 @@ async def _run_agent(user_id: str, prompt: str) -> str:
     narration, partial chunks) aren't posted as extra Discord messages.
     """
     assert _runner is not None, "runner not initialised"
+
+    # Ollama-via-pc-broker: wake the PC and wait for readiness (no-op otherwise).
+    await broker.ensure_ready()
 
     # Clear any prior memory-failure marker so it reflects only this turn.
     mem = getattr(_runner, "memory_service", None)

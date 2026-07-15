@@ -24,6 +24,7 @@ daily_briefing/
   Dockerfile.dev        # dev image — runs ADK web UI on port 8000 (adk web)
   agent.py              # ADK Agent — wires model + tools; make_agent(), now_et(), _save_to_memory
   models.py             # backend selection — make_model() returns the model arg for Agent()
+  broker.py             # pc-broker wake helper — wakes the gaming PC before Ollama-backed runs
   instruction.md        # system prompt (edit without touching code)
   main.py               # CLI debug runner — prints digest to stdout (not used in production)
   discord_bot.py        # long-running Discord bot: scheduled briefing + conversational messages
@@ -176,6 +177,7 @@ follow the same pattern.
 - **Per-user memory isolation**: each Discord user_id maps to a distinct `app_name/user_id` scope in Supabase. The scheduled briefing uses `user_id="scheduler"` — isolated from per-user scopes.
 - **Split raw clients from tool logic**: `apis/*.py` owns HTTP calls; `tools/*.py` owns formatting, orchestration, and ADK-facing function signatures.
 - **Configurable model backend**: `BACKEND=gemini` uses `GEMINI_MODEL` directly; `BACKEND=ollama` and `BACKEND=github` both wrap the model through `LiteLlm` (Ollama via `ollama_chat/<model>`, GitHub Models via `github/<model>` against GitHub's official OpenAI-compatible inference endpoint). Selection lives in `daily_briefing/models.py` — one helper per provider, so adding a fourth backend is a small additive change rather than another inline branch in `agent.py`.
+- **Wake-before-run for broker-fronted Ollama**: when `PC_BROKER_URL` is set (and `BACKEND=ollama`), `daily_briefing/broker.py` wakes the gaming PC through pc-broker (`POST /api/power/on`, then poll `/api/status`) before every agent run — the broker returns 503 while the PC is asleep. Both entry points call `broker.ensure_ready()`; with the env vars unset it is a no-op, so local and non-Ollama runs are unaffected.
 - **ESPN-first sports with fallback**: the sports tool uses ESPN when available and falls back to TheSportsDB for current CFL events.
 - **Runnable smoke tests live beside the app**: `daily_briefing/smoke_tests/` contains live tool tests, a local agent runner, and a Supabase memory smoke test.
 - **Plain Python callables**: ADK picks up tools automatically — no decorators or schemas needed.
