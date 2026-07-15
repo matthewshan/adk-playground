@@ -132,6 +132,7 @@ adk-playground/
       discord.py          # Webhook client (not used by agent; kept for manual use)
       espn.py
       gnews.py
+      rss.py              # AI-news RSS feeds (no key required)
       google_calendar.py
       open_meteo.py
       supabase.py         # pgvector insert + similarity search
@@ -141,7 +142,7 @@ adk-playground/
     tools/                # ADK-registered tool functions (one file per API)
       calendar_events.py
       discord_webhook.py  # Not used by agent; kept for manual use
-      news.py
+      news.py             # get_news (GNews general) + get_ai_news (RSS, AI-focused)
       sports.py
       weather.py
     smoke_tests/          # Runnable integration / unit tests
@@ -175,7 +176,7 @@ each value, what it's for, limits, and gotchas**, see the
 | `PC_BROKER_URL` | no | Set when `OLLAMA_API_BASE` points at pc-broker — the bot POSTs `/api/power/on` and polls `/api/status` until `ready` before each agent run (`daily_briefing/broker.py`) |
 | `PC_BROKER_WAKE_TIMEOUT` | no | Seconds to wait for the PC to become `ready` (default `300`) |
 | `GITHUB_API_KEY` | if GitHub | Fine-grained PAT with `Models: read` scope — https://github.com/settings/tokens |
-| `GITHUB_MODEL` | no | default `gpt-4.1`; see `daily_briefing/.env.example` for the fallback ladder |
+| `GITHUB_MODEL` | no | default `gpt-5-mini`; see `daily_briefing/.env.example` for the fallback ladder |
 | `GNEWS_API_KEY` | yes | GNews free tier |
 | `TAVILY_API_KEY` | if non-Gemini | Tavily web search (https://tavily.com); needed on `ollama`/`github` backends — Gemini uses native `google_search` |
 | `DISCORD_BOT_TOKEN` | yes | Discord bot token — Developer Portal → Bot → Token |

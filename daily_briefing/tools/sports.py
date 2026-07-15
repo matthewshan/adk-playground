@@ -149,7 +149,7 @@ def get_sports_scores(teams: list[dict] | None = None) -> str:
 
         # TheSportsDB fallback when ESPN has no schedule or scoreboard data
         if not sched_events and not recent_results and not upcoming:
-            tsdb_events = _tsdb_get_team_events(league_label, team_name, today.year)
+            tsdb_events = _tsdb_get_team_events(league_label, team_name)
             if tsdb_events:
                 recent_results = _tsdb_get_recent_results(tsdb_events, today, yesterday)
                 upcoming = _tsdb_get_upcoming_games(tsdb_events, today)

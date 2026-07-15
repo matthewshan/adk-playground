@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-from daily_briefing.tools import TrackedTeam, get_news, get_sports_scores, get_weather
+from daily_briefing.tools import TrackedTeam, get_ai_news, get_news, get_sports_scores, get_weather
 from daily_briefing.tools.calendar_events import get_calendar_events
 from daily_briefing.tools.discord_webhook import send_discord
 
@@ -97,6 +97,25 @@ def test_news() -> bool | None:
         return False
 
 
+def test_ai_news() -> bool | None:
+    _header("AI NEWS — RSS feeds (no key required)")
+    try:
+        result = get_ai_news()
+        print(result)
+        assert result, "Result was empty"
+        # Feeds may be blocked by network egress in some environments.
+        if result.startswith("AI news unavailable") or result == "No AI news available.":
+            print(f"{SKIP}  feeds unreachable from this environment")
+            return None
+        assert "•" in result, "Expected bulleted headlines"
+        print(PASS)
+        return True
+    except Exception:
+        print(FAIL)
+        traceback.print_exc()
+        return False
+
+
 def test_calendar() -> bool | None:
     _header("CALENDAR — Google Calendar events")
     sa_b64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64")
@@ -133,7 +152,7 @@ def test_discord() -> bool | None:
 
 
 def main() -> int:
-    tests = [test_weather_grand_rapids, test_sports_scores, test_news, test_calendar, test_discord]
+    tests = [test_weather_grand_rapids, test_sports_scores, test_news, test_ai_news, test_calendar, test_discord]
     results = [t() for t in tests]
     passed = results.count(True)
     failed = results.count(False)

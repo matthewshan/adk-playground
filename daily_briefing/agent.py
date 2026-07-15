@@ -18,7 +18,7 @@ from daily_briefing.logging_callbacks import (
 )
 from daily_briefing.models import make_model, request_token_limit, supports_google_search
 from daily_briefing.tools.calendar_events import get_calendar_events
-from daily_briefing.tools.news import get_news
+from daily_briefing.tools.news import get_ai_news, get_news
 from daily_briefing.tools.sports import get_game_plays, get_sports_scores
 from daily_briefing.tools.weather import get_weather
 from daily_briefing.tools.web_search import web_search
@@ -62,6 +62,7 @@ def make_agent(name: str = "daily_briefing") -> Agent:
     tools = [
         get_weather,
         get_news,
+        get_ai_news,
         get_sports_scores,
         get_game_plays,
         get_calendar_events,
