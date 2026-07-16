@@ -35,23 +35,31 @@ def _state(base: str) -> str:
     return resp.json().get("state", "")
 
 
+def _power_on(base: str) -> None:
+    requests.post(f"{base}/api/power/on", timeout=_HTTP_TIMEOUT).raise_for_status()
+
+
 def _wake_and_wait(base: str, timeout: float) -> None:
     if _state(base) == "ready":
         return
 
     logger.info("Waking gaming PC via pc-broker at %s", base)
-    requests.post(f"{base}/api/power/on", timeout=_HTTP_TIMEOUT).raise_for_status()
+    _power_on(base)
 
     deadline = time.monotonic() + timeout
     while True:
         state = _state(base)
         if state == "ready":
             return
-        # Broker terminal states — waiting longer won't help.
-        if state in ("timeout", "error"):
-            raise RuntimeError(f"pc-broker reported state {state!r} while waking the PC")
         if time.monotonic() >= deadline:
             raise TimeoutError(f"PC not ready after {int(timeout)}s (last state: {state!r})")
+        # Broker gave up on its own reachability window (or errored). A new
+        # wake request from these states re-sends the WoL packet, so keep
+        # retrying until *our* deadline — the 2026-07-16 briefing died on a
+        # single unanswered wake.
+        if state in ("timeout", "error"):
+            logger.warning("pc-broker reported %r — re-requesting wake", state)
+            _power_on(base)
         time.sleep(_POLL_SECONDS)
 
 
