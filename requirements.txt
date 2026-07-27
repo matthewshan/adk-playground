@@ -6,3 +6,12 @@ google-api-python-client
 discord.py>=2.3,<3
 supabase
 google-genai
+# Pinned deliberately: the langfuse SDK was rewritten in v4 (v3 code does not
+# carry over), so an unpinned bump would silently break tracing.
+langfuse==4.14.1
+openinference-instrumentation-google-adk==0.1.17
+# langfuse pulls the newest OpenTelemetry, but google-adk 2.1.0 caps it at
+# <=1.41.1. Without these pins pip resolves to 1.44.0 and breaks google-adk.
+opentelemetry-api==1.41.1
+opentelemetry-sdk==1.41.1
+opentelemetry-exporter-otlp-proto-http==1.41.1

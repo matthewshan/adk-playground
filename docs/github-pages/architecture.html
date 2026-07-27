@@ -248,6 +248,11 @@ sequenceDiagram
             <td>Scheduled task (7 AM ET via <code>discord.ext.tasks</code>), <code>on_message</code> handler, session and lock management, message chunking</td>
           </tr>
           <tr>
+            <td><code>telemetry.py</code></td>
+            <td>LLM tracing</td>
+            <td><code>configure_telemetry()</code> — instruments ADK to emit OpenTelemetry traces to Langfuse. Must run before <code>agent.py</code> is imported, and no-ops unless the Langfuse keys are set.</td>
+          </tr>
+          <tr>
             <td><code>tools/</code></td>
             <td>ADK tool functions</td>
             <td><code>weather.py</code>, <code>news.py</code>, <code>sports.py</code>, <code>calendar_events.py</code> — plain Python callables registered with the ADK Agent</td>
@@ -265,7 +270,7 @@ sequenceDiagram
           <tr>
             <td><code>smoke_tests/</code></td>
             <td>Integration tests</td>
-            <td>Runnable scripts: <code>test_agent.py</code>, <code>test_apis.py</code>, <code>test_sports.py</code>, <code>test_discord_bot.py</code>, <code>test_memory.py</code></td>
+            <td>Runnable scripts: <code>test_agent.py</code>, <code>test_apis.py</code>, <code>test_sports.py</code>, <code>test_discord_bot.py</code>, <code>test_memory.py</code>, <code>eval_run.py</code> (Langfuse offline eval)</td>
           </tr>
         </tbody>
       </table>

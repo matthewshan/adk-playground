@@ -40,6 +40,18 @@ tasks:
     cmds:
       - '{{.PYTHON}} daily_briefing/smoke_tests/test_discord_bot.py'
 
+  eval:seed:
+    desc: Create/refresh the Langfuse eval dataset
+    deps: [_venv-check]
+    cmds:
+      - '{{.PYTHON}} daily_briefing/smoke_tests/eval_run.py --seed'
+
+  eval:
+    desc: Run the Langfuse dataset experiment against the current backend
+    deps: [_venv-check]
+    cmds:
+      - '{{.PYTHON}} daily_briefing/smoke_tests/eval_run.py'
+
   web:
     desc: Run the ADK web UI on port 8000
     deps: [_venv-check]

@@ -248,6 +248,41 @@ SUPABASE_SERVICE_ROLE_KEY=<service-role key>
 
 ---
 
+## 9. Langfuse — LLM tracing & evaluations (optional)
+
+**Used for:** OpenTelemetry traces of every model call and tool call, plus datasets and
+LLM-as-a-judge evaluations. Wired up in `daily_briefing/telemetry.py`, which no-ops
+unless both keys are set — so leaving these blank costs nothing.
+
+Self-hosted in the homelab at [langfuse.mattshan.dev](https://langfuse.mattshan.dev)
+(reachable over Twingate); deployment manifests live in `k3s-homelab/services/langfuse/`.
+Langfuse Cloud works too — just leave `LANGFUSE_BASE_URL` unset.
+
+### Steps
+1. Open the Langfuse UI and sign in (first account created becomes the owner).
+2. Create an organization and a project.
+3. **Project → Settings → API Keys → Create new API key**.
+4. Copy the **public** key (`pk-lf-…`) and the **secret** key (`sk-lf-…`) — the secret is
+   shown only once.
+
+### Environment variables
+```dotenv
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_BASE_URL=https://langfuse.mattshan.dev
+OTEL_SERVICE_NAME=daily-briefing
+```
+
+> The SDK was rewritten in v4, which deprecates `LANGFUSE_HOST` in favour of
+> `LANGFUSE_BASE_URL`. `langfuse` and `openinference-instrumentation-google-adk` are
+> pinned in `requirements.txt`, along with `opentelemetry-*==1.41.1` — `google-adk` caps
+> OpenTelemetry at `<=1.41.1`, and an unpinned install resolves past that and breaks it.
+
+> In-cluster, the bot uses `http://langfuse-web.langfuse.svc.cluster.local:3000` to avoid
+> egressing through the gateway.
+
+---
+
 ## Minimum to run
 
 | Goal | Required variables |
@@ -256,3 +291,4 @@ SUPABASE_SERVICE_ROLE_KEY=<service-role key>
 | Print a digest on `BACKEND=gemini` | `GEMINI_API_KEY`, `GNEWS_API_KEY`, calendar vars |
 | Run the full Discord bot | the above **plus** `DISCORD_BOT_TOKEN`, `DISCORD_BOT_CHANNEL_ID` |
 | Long-term memory | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY` |
+| LLM tracing / evals | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` |

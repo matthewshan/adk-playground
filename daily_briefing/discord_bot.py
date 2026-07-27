@@ -31,6 +31,11 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(Path(__file__).parent / ".env")
 
+from daily_briefing.telemetry import configure_telemetry  # noqa: E402
+
+# Must instrument before importing the agent — it builds root_agent at import time.
+configure_telemetry()
+
 import discord  # noqa: E402
 from discord.ext import tasks  # noqa: E402
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService  # noqa: E402

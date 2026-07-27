@@ -71,6 +71,15 @@ Raw equivalents:
 .venv/bin/python3 daily_briefing/smoke_tests/test_memory.py
 ```
 
+### Evaluations (Langfuse)
+```bash
+task eval:seed      # create/refresh the "daily-briefing-inputs" dataset
+task eval           # run the dataset experiment against the current BACKEND
+```
+
+Each run is labelled `<backend>-<model>`, so running it once per backend or prompt
+revision gives comparable runs in the Langfuse UI. Requires the `LANGFUSE_*` env vars.
+
 ### ADK web UI (dev/testing)
 ```bash
 task web            # starts ADK web UI on port 8000
@@ -123,6 +132,7 @@ adk-playground/
     instruction.md        # System prompt (the ONLY place the prompt lives)
     main.py               # CLI debug runner — prints digest to stdout (not used in production)
     broker.py             # pc-broker wake helper — wakes the gaming PC before Ollama runs
+    telemetry.py          # Langfuse tracing — configure_telemetry() runs before agent.py imports
     discord_bot.py        # Long-running bot — scheduled briefing (7 AM ET) + conversation
     Dockerfile            # Legacy CronJob image (bot now handles scheduling)
     Dockerfile.bot        # Container image for the Discord bot (primary)
@@ -151,6 +161,7 @@ adk-playground/
       test_discord_bot.py
       test_logging.py     # Logging-callback unit tests (correlation, tokens, error level)
       test_memory.py      # Supabase pgvector smoke test
+      eval_run.py         # Langfuse dataset experiment — offline regression eval
       test_sports.py
   docs/                   # Architecture, setup, prompt, and deployment notes
   requirements.txt        # Shared Python dependencies
@@ -185,6 +196,10 @@ each value, what it's for, limits, and gotchas**, see the
 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | yes | Base64-encoded service account JSON |
 | `SUPABASE_URL` | optional | Supabase project URL — enables long-term memory |
 | `SUPABASE_SERVICE_ROLE_KEY` | optional | Service-role key — bot warns and degrades if absent |
+| `LANGFUSE_PUBLIC_KEY` | optional | Langfuse project public key — enables LLM tracing. Tracing stays off unless both keys are set |
+| `LANGFUSE_SECRET_KEY` | optional | Langfuse project secret key |
+| `LANGFUSE_BASE_URL` | no | Langfuse base URL, e.g. `https://langfuse.mattshan.dev` or the in-cluster `http://langfuse-web.langfuse.svc.cluster.local:3000`. Defaults to Langfuse Cloud. SDK v4 deprecates `LANGFUSE_HOST` in favour of this |
+| `OTEL_SERVICE_NAME` | no | Service name on emitted traces (e.g. `daily-briefing`) |
 | `LOG_LEVEL` | no | Default `INFO`. Agent callbacks (`daily_briefing/logging_callbacks.py`) log one compact line per invocation, prompt, response, tool call, and token-usage tally — each tagged with a `[<inv> u=<user>]` correlation id so concurrent sessions stay traceable. Error-shaped tool results log at WARNING. DEBUG just adds stdlib chatter |
 
 ---

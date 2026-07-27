@@ -272,6 +272,26 @@ python3 daily_briefing/smoke_tests/test_agent.py</pre>
             <td><span class="req-opt">optional</span></td>
             <td>Supabase <strong>service_role</strong> key (not the <code>anon</code> key). Has full DB access and bypasses row-level security — keep it in <code>.env</code> only, never commit it.</td>
           </tr>
+          <tr>
+            <td><code>LANGFUSE_PUBLIC_KEY</code></td>
+            <td><span class="req-opt">optional</span></td>
+            <td>Langfuse project public key (<code>pk-lf-…</code>), for LLM tracing and evaluations. Mint it under Project → Settings → API Keys. Tracing stays off unless both Langfuse keys are set.</td>
+          </tr>
+          <tr>
+            <td><code>LANGFUSE_SECRET_KEY</code></td>
+            <td><span class="req-opt">optional</span></td>
+            <td>Langfuse project secret key (<code>sk-lf-…</code>). Shown only once at creation — keep it in <code>.env</code> only, never commit it.</td>
+          </tr>
+          <tr>
+            <td><code>LANGFUSE_BASE_URL</code></td>
+            <td><span class="req-opt">optional</span></td>
+            <td>Base URL of the Langfuse instance, e.g. <code>https://langfuse.mattshan.dev</code>. Defaults to Langfuse Cloud when unset. Replaces the deprecated <code>LANGFUSE_HOST</code> in SDK v4.</td>
+          </tr>
+          <tr>
+            <td><code>OTEL_SERVICE_NAME</code></td>
+            <td><span class="req-opt">optional</span></td>
+            <td>Service name attached to emitted traces, e.g. <code>daily-briefing</code>.</td>
+          </tr>
         </tbody>
       </table>
     </div>
