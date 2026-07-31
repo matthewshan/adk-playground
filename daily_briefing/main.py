@@ -22,7 +22,12 @@ from dotenv import load_dotenv
 _ENV_FILE = Path(__file__).parent / ".env"
 load_dotenv(_ENV_FILE)
 
+from daily_briefing.log_config import configure_logging  # noqa: E402
 from daily_briefing.telemetry import configure_telemetry  # noqa: E402
+
+# Logging first, or configure_telemetry's INFO line is emitted before any handler
+# exists and is dropped — leaving no way to tell whether tracing came up.
+configure_logging()
 
 # Must instrument before importing the agent — it builds root_agent at import time.
 configure_telemetry()
@@ -34,7 +39,6 @@ from google.genai import types  # noqa: E402
 
 from daily_briefing import broker  # noqa: E402
 from daily_briefing.agent import now_et, root_agent  # noqa: E402
-from daily_briefing.log_config import configure_logging  # noqa: E402
 from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService  # noqa: E402
 
 APP_NAME = "daily_briefing"
@@ -44,8 +48,6 @@ logger = logging.getLogger(__name__)
 
 
 async def run() -> None:
-    configure_logging()
-
     # Ollama-via-pc-broker: wake the PC and wait for readiness (no-op otherwise).
     await broker.ensure_ready()
 
