@@ -31,7 +31,12 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(Path(__file__).parent / ".env")
 
+from daily_briefing.log_config import configure_logging  # noqa: E402
 from daily_briefing.telemetry import configure_telemetry  # noqa: E402
+
+# Logging first, or configure_telemetry's INFO line is emitted before any handler
+# exists and is dropped — leaving no way to tell whether tracing came up.
+configure_logging()
 
 # Must instrument before importing the agent — it builds root_agent at import time.
 configure_telemetry()
@@ -45,7 +50,7 @@ from google.genai import types  # noqa: E402
 
 from daily_briefing import broker  # noqa: E402
 from daily_briefing.agent import now_et, root_agent  # noqa: E402
-from daily_briefing.log_config import configure_logging, preview as _preview  # noqa: E402
+from daily_briefing.log_config import preview as _preview  # noqa: E402
 from daily_briefing.memory.supabase_memory_service import SupabaseMemoryService  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -341,8 +346,6 @@ async def on_message(message: discord.Message) -> None:
 
 def main() -> None:
     global _runner, _channel_id
-
-    configure_logging()
 
     token = os.environ.get("DISCORD_BOT_TOKEN", "")
     if not token:
