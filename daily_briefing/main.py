@@ -22,6 +22,11 @@ from dotenv import load_dotenv
 _ENV_FILE = Path(__file__).parent / ".env"
 load_dotenv(_ENV_FILE)
 
+from daily_briefing.telemetry import configure_telemetry  # noqa: E402
+
+# Must instrument before importing the agent — it builds root_agent at import time.
+configure_telemetry()
+
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService  # noqa: E402
 from google.adk.runners import Runner  # noqa: E402
 from google.adk.sessions.in_memory_session_service import InMemorySessionService  # noqa: E402
