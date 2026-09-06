@@ -89,6 +89,7 @@ def test_news() -> bool | None:
         print(result)
         assert result, "Result was empty"
         assert "•" in result, "Expected bulleted headlines"
+        assert "](http" in result, "Expected headlines linked to their articles"
         print(PASS)
         return True
     except Exception:
@@ -108,6 +109,7 @@ def test_ai_news() -> bool | None:
             print(f"{SKIP}  feeds unreachable from this environment")
             return None
         assert "•" in result, "Expected bulleted headlines"
+        assert "](http" in result, "Expected headlines linked to their articles"
         print(PASS)
         return True
     except Exception:

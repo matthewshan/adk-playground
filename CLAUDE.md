@@ -152,7 +152,7 @@ adk-playground/
     tools/                # ADK-registered tool functions (one file per API)
       calendar_events.py
       discord_webhook.py  # Not used by agent; kept for manual use
-      news.py             # get_news (GNews general) + get_ai_news (RSS, AI-focused)
+      news.py             # get_news (GNews general) + get_ai_news (RSS, AI-focused); both return article-linked bullets
       sports.py
       weather.py
     smoke_tests/          # Runnable integration / unit tests
