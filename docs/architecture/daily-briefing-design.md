@@ -119,13 +119,33 @@ main.py (CLI only — not used in production)
 | Tool module | Raw client | API | Auth | Notes |
 |-------------|------------|-----|------|-------|
 | `tools/weather.py` | `apis/open_meteo.py` | Open-Meteo | None | `current` + `hourly` params; `timezone=America/Detroit` |
-| `tools/news.py` (`get_news`) | `apis/gnews.py` | GNews | `GNEWS_API_KEY` | 10 general headlines; free tier is localhost-only |
-| `tools/news.py` (`get_ai_news`) | `apis/rss.py` | Curated AI RSS feeds | None | AI/ML headlines from TechCrunch, VentureBeat, Google News; deduped, most-recent-first |
+| `tools/news.py` (`get_news`) | `apis/gnews.py` | GNews | `GNEWS_API_KEY` | 10 general headlines, each linked to its article; free tier is localhost-only |
+| `tools/news.py` (`get_ai_news`) | `apis/rss.py` | Curated AI RSS feeds | None | AI/ML headlines from TechCrunch, VentureBeat, Google News; deduped, most-recent-first, each linked to its article |
 | `tools/sports.py` | `apis/espn.py` | ESPN public API | None | Team lookup, records, schedule, scoreboard, standings |
 | `tools/sports.py` | `apis/thesportsdb.py` | TheSportsDB | None | Fallback for CFL schedules/results when ESPN lacks current data |
 | `tools/calendar_events.py` | `apis/google_calendar.py` | Google Calendar v3 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Service account; share calendar with the SA email |
 | `tools/discord_webhook.py` | `apis/discord.py` | Discord webhook | `DISCORD_WEBHOOK_URL` | POST; caller truncates to the 2000-character limit |
 | `discord_bot.py` | discord.py Gateway | Discord bot | `DISCORD_BOT_TOKEN` | Inbound messages → ADK agent → `channel.send()` |
+
+### News headline links
+
+Both news tools return each headline pre-formatted as a Discord masked link:
+
+```
+• [Headline](https://publisher.example/article) — Source
+```
+
+`tools/news.py::_format_headline` builds these. Masked links are used rather
+than bare URLs because bot messages render them as clickable titles *without*
+generating a link-preview embed per headline — five embeds would swamp the
+briefing. A feed item with no usable `http(s)` link degrades to the plain
+`• Headline — Source` form.
+
+`instruction.md` tells the model to copy these bullets verbatim, since the
+model's only job is to select and order headlines, not to retype URLs. Note
+that Google News RSS links are redirect URLs several hundred characters long,
+so a briefing with links can exceed Discord's 2000-character message limit;
+`discord_bot.py::_split_message` splits on newlines to handle that.
 
 ---
 

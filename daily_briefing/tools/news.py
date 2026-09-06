@@ -20,6 +20,20 @@ _AI_FEEDS = [
 _MIN_DT = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
 
 
+def _format_headline(title: str, link: str, source: str) -> str:
+    """Render `• [Title](url) — Source`, unlinked when there is no http(s) link.
+
+    Masked link rather than a bare URL: Discord renders it clickable in bot
+    messages without adding a link-preview embed per headline.
+    """
+    label = title.replace("[", "(").replace("]", ")")  # a ] would end the label early
+    url = link.strip()
+    if not url.startswith(("http://", "https://")):
+        return f"• {label} — {source}"
+    url = url.replace(" ", "%20").replace("(", "%28").replace(")", "%29")  # would close the target
+    return f"• [{label}]({url}) — {source}"
+
+
 def get_news() -> str:
     """Fetch top general headlines from GNews.
 
@@ -27,7 +41,7 @@ def get_news() -> str:
       GNEWS_API_KEY  — GNews.io API key (https://gnews.io)
 
     Returns:
-        A bulleted string listing headline and source.
+        A bulleted string of "• [headline](link) — source" lines.
     """
     gnews_key = os.environ.get("GNEWS_API_KEY", "")
     if not gnews_key:
@@ -47,7 +61,7 @@ def get_news() -> str:
             continue
         seen.add(title.lower())
         source = (article.get("source") or {}).get("name", "GNews")
-        lines.append(f"• {title} — {source}")
+        lines.append(_format_headline(title, article.get("url", ""), source))
 
     return "\n".join(lines) if lines else "No news available."
 
@@ -62,7 +76,8 @@ def get_ai_news(max_results: int = 6) -> str:
         max_results: Maximum number of headlines to return.
 
     Returns:
-        A bulleted string of "headline — source", or an error string.
+        A bulleted string of "• [headline](link) — source" lines, or an error
+        string.
     """
     items: list[dict] = []
     failures = 0
@@ -84,7 +99,7 @@ def get_ai_news(max_results: int = 6) -> str:
         if title.lower() in seen:
             continue
         seen.add(title.lower())
-        lines.append(f"• {title} — {item['source']}")
+        lines.append(_format_headline(title, item["link"], item["source"]))
         if len(lines) >= max_results:
             break
 
